@@ -1,0 +1,81 @@
+[
+  {
+    "platform": "facebook",
+    "name": "Xbox Series X",
+    "query_url": "https://www.facebook.com/marketplace/bucharest/search/?query=xbox%20series%20x&minPrice=1500&maxPrice=3000&daysSinceListed=30",
+    "min_price": 1500,
+    "max_price": 3000,
+    "include_keywords": [
+      "series x",
+      "seria x",
+      "series-x",
+      "seriesx"
+    ],
+    "exclude_keywords": [
+      "series s",
+      "seria s",
+      "one x",
+      "one s",
+      "xbox one",
+      "360",
+      "expansion",
+      "storage",
+      "card",
+      "volan",
+      "turtle beach",
+      "casti",
+      "headset",
+      "doar controller",
+      "stand",
+      "suport",
+      "incarcator",
+      "baterie",
+      "acumulator",
+      "cablu",
+      "skin",
+      "sticker",
+      "cumpar",
+      "caut",
+      "schimb"
+    ],
+    "sort_order": 50
+  },
+  {
+    "platform": "facebook",
+    "name": "PlayStation 5",
+    "query_url": "https://www.facebook.com/marketplace/bucharest/search/?query=playstation%205&minPrice=1500&maxPrice=2500&daysSinceListed=30",
+    "min_price": 1500,
+    "max_price": 2500,
+    "include_keywords": [
+      "ps5",
+      "ps 5",
+      "playstation 5",
+      "play station 5",
+      "playstation5"
+    ],
+    "exclude_keywords": [
+      "ps4",
+      "playstation 4",
+      "portal",
+      "vr2",
+      "psvr",
+      "volan",
+      "doar controller",
+      "dualsense",
+      "casti",
+      "headset",
+      "stand",
+      "suport",
+      "incarcator",
+      "statie",
+      "cablu",
+      "skin",
+      "sticker",
+      "husa",
+      "cumpar",
+      "caut",
+      "schimb"
+    ],
+    "sort_order": 60
+  }
+]

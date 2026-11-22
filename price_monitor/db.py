@@ -189,7 +189,8 @@ class Db:
             schema = MYSQL_SCHEMA
         else:
             self.kind = "sqlite"
-            self.conn = sqlite3.connect(Path(sqlite_path))
+            self.path = Path(sqlite_path)
+            self.conn = sqlite3.connect(self.path)
             self.conn.row_factory = sqlite3.Row
             self.conn.execute("PRAGMA foreign_keys = ON")
             schema = SQLITE_SCHEMA
@@ -229,6 +230,26 @@ class Db:
 
     def commit(self):
         self.conn.commit()
+
+    def try_lock(self):
+        """One check at a time on this database (cron and a manual run can overlap): True if this
+        connection got the lock, False if another check holds it."""
+        if self.kind == "mysql":
+            return bool(self.one("SELECT GET_LOCK(CONCAT(DATABASE(), '.tick'), 0) AS ok")["ok"])
+        import fcntl
+        self._lock_file = open(f"{self.path}.lock", "w")
+        try:
+            fcntl.flock(self._lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return True
+        except OSError:
+            self._lock_file.close()
+            return False
+
+    def unlock(self):
+        if self.kind == "mysql":
+            self.execute("SELECT RELEASE_LOCK(CONCAT(DATABASE(), '.tick'))")
+        elif getattr(self, "_lock_file", None):
+            self._lock_file.close()
 
     def close(self):
         self.conn.close()

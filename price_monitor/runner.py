@@ -3,9 +3,15 @@
 Cron (or the local loop) calls tick() often, e.g. every 5 minutes; the
 database decides what actually runs:
   settings.enabled = 0          -> nothing runs
-  settings.run_requested_at set -> every enabled search runs now ("Run now")
+  settings.run_requested_at set -> every enabled search runs now ("Run all now"): it's turned
+                                   into a request on each search, so every copy of the monitor
+                                   (server, laptop) runs its own share
   searches.run_requested_at set -> that search runs now, even if disabled
   otherwise                     -> enabled searches whose interval has passed
+
+PLATFORMS (in .env, or --platforms) limits a copy of the monitor to some
+platforms: e.g. olx,vinted on the server and facebook on a laptop, so nothing
+runs twice. --search runs chosen searches now.
 """
 
 import json
@@ -40,6 +46,14 @@ def env_number(key, default):
 
 def to_ron(price, currency, eur_to_ron):
     return price * eur_to_ron if currency == "EUR" else price
+
+
+def allowed_platforms(platforms=None):
+    """The platforms this copy runs: --platforms, else PLATFORMS in .env, else all. Lowercase set,
+    or None for all."""
+    raw = platforms if platforms is not None else os.getenv("PLATFORMS")
+    names = {p.strip().lower() for p in (raw or "").split(",") if p.strip()}
+    return names or None
 
 
 def due_searches(searches, settings, now):
@@ -171,23 +185,56 @@ def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct,
     return new, drops, stats, is_baseline
 
 
-def tick(db):
+def tick(db, platforms=None, search_ids=None):
+    """One check. platforms: limit to these (see allowed_platforms); search_ids: run these now.
+    Skipped when another check is running on the same database."""
+    if not db.try_lock():
+        log.info("Another check is running on this database; skipping this one")
+        return 0
+    try:
+        return _tick(db, platforms, search_ids)
+    finally:
+        db.unlock()
+
+
+def _tick(db, platforms, search_ids):
     eur_to_ron = env_number("EUR_TO_RON", 4.97)
     drop_min_pct = env_number("PRICE_DROP_MIN_PCT", 3)
     now = utcnow()
+    allowed = allowed_platforms(platforms)
 
     settings = db.one("SELECT * FROM settings WHERE id = 1")
+    # The platforms this copy runs, for the dashboard to offer
     db.execute("UPDATE settings SET providers = ?, last_tick_at = ? WHERE id = 1",
-               (json.dumps([{"name": c.name, "label": c.label} for c in PROVIDERS.values()]), to_db_time(now)))
+               (json.dumps([{"name": c.name, "label": c.label} for c in PROVIDERS.values()
+                            if allowed is None or c.name in allowed]), to_db_time(now)))
     db.commit()
-    if not settings["enabled"]:
+    if not settings["enabled"] and not search_ids:
         log.info("The monitor is turned off in settings; nothing to do")
         return 0
 
-    searches = db.all("SELECT * FROM searches ORDER BY sort_order, id")
-    due = due_searches(searches, settings, now)
+    # "Run all now": a request on every enabled search, so each copy runs its own share
+    if settings["run_requested_at"] is not None:
+        db.execute("UPDATE searches SET run_requested_at = ? WHERE enabled = 1",
+                   (to_db_time(from_db_time(settings["run_requested_at"])),))
+        db.execute("UPDATE settings SET run_requested_at = NULL WHERE id = 1 AND run_requested_at = ?",
+                   (to_db_time(from_db_time(settings["run_requested_at"])),))
+        db.commit()
+        settings = {**settings, "run_requested_at": None}
+
+    searches = [s for s in db.all("SELECT * FROM searches ORDER BY sort_order, id")
+                if allowed is None or s["platform"].lower() in allowed]
+    if search_ids:
+        due = [s for s in searches if s["id"] in search_ids]
+        missing = set(search_ids) - {s["id"] for s in due}
+        if missing:
+            log.warning("Not run: no search %s here%s", ", ".join(f"#{i}" for i in sorted(missing)),
+                        f" (this copy runs {', '.join(sorted(allowed))})" if allowed else "")
+    else:
+        due = due_searches(searches, settings, now)
     if not due:
-        log.info("No searches due (%d configured)", len(searches))
+        log.info("No searches due (%d here%s)", len(searches),
+                 f", platforms: {', '.join(sorted(allowed))}" if allowed else "")
 
     providers, last_platform, reports = {}, None, []
     for s in due:
@@ -240,11 +287,6 @@ def tick(db):
         if s["run_requested_at"] is not None:  # clear only the request we served
             db.execute("UPDATE searches SET run_requested_at = NULL WHERE id = ? AND run_requested_at = ?",
                        (s["id"], to_db_time(from_db_time(s["run_requested_at"]))))
-        db.commit()
-
-    if settings["run_requested_at"] is not None:
-        db.execute("UPDATE settings SET run_requested_at = NULL WHERE id = 1 AND run_requested_at = ?",
-                   (to_db_time(from_db_time(settings["run_requested_at"])),))
         db.commit()
 
     if reports:

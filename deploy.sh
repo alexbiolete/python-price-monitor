@@ -37,8 +37,10 @@ fi
 
 echo "==> Copying files to $HOST:~/$REMOTE_DIR"
 ssh "$HOST" "mkdir -p ~/$REMOTE_DIR/price_monitor/providers ~/logs"
-# Remote .env = local .env + server-only settings
-cat .env .env.server | ssh "$HOST" "umask 077 && cat > ~/$REMOTE_DIR/.env"
+# Remote .env = local .env without the keys .env.server sets, then .env.server
+# (e.g. PLATFORMS=facebook locally, olx,vinted on the server)
+SERVER_KEYS="$(grep -oE '^[A-Z_][A-Z0-9_]*=' .env.server | tr -d = | paste -sd'|' -)"
+{ grep -vE "^(${SERVER_KEYS:-__none__})=" .env; echo; cat .env.server; } | ssh "$HOST" "umask 077 && cat > ~/$REMOTE_DIR/.env"
 scp -q requirements.txt searches.example.json "$HOST:$REMOTE_DIR/"
 scp -q price_monitor/*.py "$HOST:$REMOTE_DIR/price_monitor/"
 scp -q price_monitor/providers/*.py "$HOST:$REMOTE_DIR/price_monitor/providers/"

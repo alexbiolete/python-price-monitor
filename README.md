@@ -1,6 +1,6 @@
 # python-price-monitor
 
-Watches searches on second-hand platforms (OLX and Vinted so far) and emails
+Watches searches on second-hand platforms (OLX, Vinted and Facebook Marketplace) and emails
 one digest when a search finds **new listings** or a listing's **price drops**,
 with **possible scams flagged** and the reasons spelled out.
 
@@ -35,6 +35,7 @@ cp .env.example .env                        # then fill it in
 | `EUR_TO_RON` | Rate for the min/max price filters on EUR listings (default 4.97) |
 | `PRICE_DROP_MIN_PCT` | Report drops of at least this many percent (default 3) |
 | `TICK_SECONDS` | How often the local loop checks what's due (default 60) |
+| `PLATFORMS` | The platforms this copy runs, e.g. `olx,vinted` (default: all). See [Server and laptop](#server-and-laptop) |
 | `MYSQL_*` | Use MySQL instead of the local `price_monitor.db` SQLite file |
 
 **Gmail:** use an [App Password](https://myaccount.google.com/apppasswords)
@@ -53,6 +54,9 @@ With no SMTP settings, the email is printed instead of sent.
 .venv/bin/python -m price_monitor --test-email     # email the latest listings, to check delivery
 .venv/bin/python -m price_monitor --resend-all     # clear the stored listings and email everything that matches now
 ```
+
+Add `--platforms facebook` to any of these to limit it to some platforms, or
+`--search 3,4` to run chosen searches now (ids from `--status`).
 
 Searches run, and appear in the email, in their `sort_order` (lower first).
 
@@ -101,6 +105,30 @@ the item was uploaded, which tightens the age check.
 |---|---|---|
 | `olx` | An OLX.ro results page with your filters set | Uses the JSON endpoint the site loads results from. The category is detected from the page once; set `{"category_id": N}` in `options` to fix it |
 | `vinted` | A Vinted catalog page (`https://www.vinted.ro/catalog?...`) | Reads the results embedded in the page, and the item page for new matches (see Possible scams). Its "newest first" isn't strict, so ages are estimated from item ids, and the item page's upload date wins when it's older. Prices include the buyer protection fee (`{"price": "item"}` in `options` for the seller's price). vinted.ro also shows items from Poland, Greece and more, so add keywords in those languages where needed |
+
+`facebook`: a Marketplace search with your filters set
+(`https://www.facebook.com/marketplace/bucharest/search/?query=...&minPrice=...&daysSinceListed=30`).
+It reads the results embedded in the page, logged out: no account is used. Facebook only shows them
+to logged-out visitors from some connections. A home connection works; the server gets the login
+page. So Facebook runs on a laptop, not the server (see below). One results page per run (about 20
+listings), sold and pending ones skipped, posting dates exact; the seller's name isn't kept.
+
+### Server and laptop
+
+Each copy of the monitor runs only the platforms in its `PLATFORMS`, so nothing runs twice:
+
+- the server: `PLATFORMS=olx,vinted` (in `.env.server`), from cron every 5 minutes
+- your laptop: `PLATFORMS=facebook` (in `.env`), when you start it
+
+```bash
+.venv/bin/python -m price_monitor --import searches.facebook.example.json   # once
+.venv/bin/python -m price_monitor                                          # keep checking Facebook
+.venv/bin/python -m price_monitor --once --platforms facebook --search 2   # one search, now
+```
+
+The laptop keeps its own data in `price_monitor.db` and sends its own email.
+"Run all now" in the dashboard becomes a request on every search, so each copy
+runs its own share when it next checks.
 
 ### Adding a platform
 
@@ -184,8 +212,8 @@ listing is first seen, and one for every change.
 | `enabled` ✎ | `0` stops every search |
 | `default_interval_minutes` ✎, `default_max_age_days` ✎ | Defaults 10 and 30 |
 | `email_to` ✎ | Overrides `EMAIL_TO`; `NULL` to use it |
-| `run_requested_at` ✎ | "Run all now" |
+| `run_requested_at` ✎ | "Run all now": the monitor turns it into a request on every enabled search |
 | `last_tick_at` | The last check (cron alive?) |
-| `providers` | JSON list of `{name, label}`: the platforms this monitor has modules for |
+| `providers` | JSON list of `{name, label}`: the platforms the copy writing here runs |
 
 Deleting a search deletes its listings and their history (foreign keys cascade).
