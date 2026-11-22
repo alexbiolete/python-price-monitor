@@ -213,6 +213,10 @@ text.
 | `provider_state` | The monitor's own (e.g. a detected OLX category) |
 | `last_run_at`, `last_status` (`ok`/`empty`/`error`), `last_error`, `last_result_count`, `last_match_count` | Written after every run |
 
+Other apps may also **delete** `listings` rows (with their `price_history`, as the dashboard's
+Listings page does). Nothing else remembers a listing, so the monitor's next run finds it again,
+and reports it as new, if its search still matches the ad.
+
 **`listings`**: what each search found and still matches. Unique on `(search_id, external_id)`.
 Its columns: `search_id`, `platform`, `external_id`, `title`, `url`, `image_url`,
 `price`, `currency`, `location`, `posted_at` (given or estimated),
