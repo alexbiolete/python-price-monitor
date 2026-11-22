@@ -62,19 +62,19 @@ def wordmark():
 def _listing_row(item, price_html):
     thumb = ""
     if item.get("image_url"):
-        thumb = (f'<td style="padding:12px 12px 12px 0;border-top:1px solid {LINE};width:56px;vertical-align:top">'
-                 f'<img src="{esc(item["image_url"])}" width="56" height="56" alt="" '
-                 f'style="display:block;width:56px;height:56px;border-radius:10px;object-fit:cover;background:{SOFT}"></td>')
+        thumb = (f'<td style="padding:10px 10px 10px 0;border-top:1px solid {LINE};width:48px;vertical-align:top">'
+                 f'<img src="{esc(item["image_url"])}" width="48" height="48" alt="" '
+                 f'style="display:block;width:48px;height:48px;border-radius:8px;object-fit:cover;background:{SOFT}"></td>')
     meta = " · ".join(x for x in (item.get("location"), item.get("platform_label")) if x)
     return (
         "<tr>" + thumb +
-        f'<td style="padding:12px 0;border-top:1px solid {LINE};vertical-align:top">'
+        f'<td style="padding:10px 0;border-top:1px solid {LINE};vertical-align:top">'
         f'<a href="{esc(item["url"])}" style="color:{INK};font-size:14px;font-weight:600;line-height:1.4;text-decoration:none">{esc(item["title"])}</a>'
         + (f'<div style="margin-top:2px;color:{MUTED};font-size:12px">{esc(meta)}</div>' if meta else "")
         + _risk_html(item)
         + f'<div style="margin-top:4px"><a href="{esc(item["url"])}" style="color:{ACCENT};font-size:12px;font-weight:600;text-decoration:none">View listing →</a></div>'
         "</td>"
-        f'<td align="right" style="padding:12px 0 12px 12px;border-top:1px solid {LINE};vertical-align:top;white-space:nowrap;font-size:14px;color:{INK}">{price_html}</td>'
+        f'<td align="right" style="padding:10px 0 10px 10px;border-top:1px solid {LINE};vertical-align:top;white-space:nowrap;font-size:14px;color:{INK}">{price_html}</td>'
         "</tr>"
     )
 
@@ -96,8 +96,8 @@ def _risk_text(item):
 
 
 def _section(title, rows):
-    return (f'<div style="margin-top:24px;color:{MUTED};font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase">{esc(title)}</div>'
-            f'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:8px;border-bottom:1px solid {LINE}">{"".join(rows)}</table>')
+    return (f'<div style="margin-top:14px;color:{MUTED};font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase">{esc(title)}</div>'
+            f'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:4px;border-bottom:1px solid {LINE}">{"".join(rows)}</table>')
 
 
 def render_digest(reports, dashboard_url=None):
@@ -115,12 +115,15 @@ def render_digest(reports, dashboard_url=None):
     kicker = setting("EMAIL_KICKER", "")
     prefix = setting("EMAIL_SUBJECT_PREFIX", "")
     footer = setting("EMAIL_FOOTER", "A notification from your price monitor.")
+    # Next to the title at the top ("Biolete Tech · Price monitor"); empty: none
+    subtitle = setting("EMAIL_SUBTITLE", "Price monitor")
     subject = f"{prefix}: {summary(n_new, n_drops)}" if prefix else title
 
     body, text = [], [title, "", intro]
+    header = wordmark() + (f" · {subtitle}" if subtitle else "")
     for r in reports:
         s = r["search"]
-        body.append(f'<h2 style="margin:32px 0 0;color:{INK};font-size:17px;line-height:1.3;font-weight:700">{esc(s["name"])}'
+        body.append(f'<h2 style="margin:24px 0 0;color:{INK};font-size:17px;line-height:1.3;font-weight:700">{esc(s["name"])}'
                     f'<span style="color:{MUTED};font-size:13px;font-weight:500"> · {esc(s["platform_label"])}</span></h2>')
         text += ["", f"== {s['name']} ({s['platform_label']})"]
         if r["drops"]:
@@ -142,12 +145,12 @@ def render_digest(reports, dashboard_url=None):
 
     button = ""
     if dashboard_url:
-        button = (f'<div style="margin-top:28px"><a href="{esc(dashboard_url)}" style="display:inline-block;margin:0 8px 8px 0;'
-                  f'padding:11px 20px;border-radius:999px;background:{ACCENT};color:#ffffff;font-size:14px;font-weight:600;'
+        button = (f'<div style="margin-top:20px"><a href="{esc(dashboard_url)}" style="display:inline-block;margin:0 8px 8px 0;'
+                  f'padding:9px 18px;border-radius:999px;background:{ACCENT};color:#ffffff;font-size:14px;font-weight:600;'
                   f'text-decoration:none">Open in dashboard</a></div>')
         text += ["", f"Open in dashboard: {dashboard_url}"]
     note = "You get this when a search finds a new listing, or a price drops by the threshold set for the monitor."
-    text += ["", note, "", footer]
+    text += ["", note, "", f"{footer} ({header})"]
 
     page = f"""<!doctype html>
 <html lang="en">
@@ -158,21 +161,21 @@ def render_digest(reports, dashboard_url=None):
 <meta name="supported-color-schemes" content="light">
 <title>{esc(title)}</title>
 </head>
-<body style="margin:0;padding:0;background:{SOFT};font-family:{FONT};-webkit-font-smoothing:antialiased">
+<body style="margin:0;padding:0;background:#ffffff;font-family:{FONT};-webkit-font-smoothing:antialiased">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0">{esc(intro)}</div>
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:{SOFT}">
-  <tr><td align="center" style="padding:32px 16px">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px">
-      <tr><td align="center" style="padding:8px 4px 28px;color:{INK};font-size:28px;line-height:1.2;font-weight:800;letter-spacing:-0.02em">{esc(wordmark())}</td></tr>
-      <tr><td style="background:#ffffff;border-radius:20px;padding:32px">
-        {f'<div style="margin:0 0 8px;color:{ACCENT};font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase">{esc(kicker)}</div>' if kicker else ''}
-        <h1 style="margin:0;color:{INK};font-size:22px;line-height:1.3;font-weight:700">{esc(title)}</h1>
-        <p style="margin:8px 0 0;color:{MUTED};font-size:15px;line-height:1.5">{esc(intro)}</p>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#ffffff">
+  <tr><td align="center" style="padding:16px 12px">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px">
+      <tr><td style="padding:0 0 14px;border-bottom:1px solid {LINE};color:{INK};font-size:18px;line-height:1.3;font-weight:800;letter-spacing:-0.01em">{esc(wordmark())}{f'<span style="color:{MUTED};font-weight:500;letter-spacing:0"> · {esc(subtitle)}</span>' if subtitle else ''}</td></tr>
+      <tr><td style="padding:16px 0 0">
+        {f'<div style="margin:0 0 6px;color:{ACCENT};font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase">{esc(kicker)}</div>' if kicker else ''}
+        <h1 style="margin:0;color:{INK};font-size:20px;line-height:1.3;font-weight:700">{esc(title)}</h1>
+        <p style="margin:4px 0 0;color:{MUTED};font-size:14px;line-height:1.5">{esc(intro)}</p>
         {"".join(body)}
         {button}
-        <p style="margin:20px 0 0;color:{MUTED};font-size:13px;line-height:1.5">{esc(note)}</p>
+        <p style="margin:16px 0 0;color:{MUTED};font-size:12px;line-height:1.5">{esc(note)}</p>
       </td></tr>
-      <tr><td align="center" style="padding:20px 4px 0;color:#a1a1aa;font-size:12px;line-height:1.5">{esc(footer)}</td></tr>
+      <tr><td style="padding:16px 0 0;color:#a1a1aa;font-size:12px;line-height:1.5">{esc(footer)}</td></tr>
     </table>
   </td></tr>
 </table>

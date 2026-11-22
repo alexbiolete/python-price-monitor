@@ -139,6 +139,7 @@ class VintedProvider(Provider):
         photos = gallery.get("photos") or gallery.get("images")
         if isinstance(photos, list):
             signals["photos"] = len(photos)
+        self.seller(listing, base=f"{urlsplit(listing.url).scheme}://{urlsplit(listing.url).netloc}")
         attrs = ((section(payload, "attributes") or {}).get("data") or {}).get("attributes") or []
         uploaded = next((a.get("data", {}).get("value") for a in attrs if a.get("code") == "upload_date"), None)
         days = relative_days(uploaded)
@@ -146,6 +147,27 @@ class VintedProvider(Provider):
             from_page = datetime.utcnow().replace(microsecond=0) - timedelta(days=days)
             if listing.posted_at is None or from_page < listing.posted_at:
                 listing.posted_at = from_page
+
+    def seller(self, listing, base):
+        """The seller's public profile (a small JSON): where they are, for the listing's location
+        ("Toruń, Polonia", or just the country), and their reviews, for the scam signals.
+        Nothing about who they are is kept."""
+        if not listing.seller_id:
+            return
+        import time
+        time.sleep(1)
+        resp = self.session.get(f"{base}/api/v2/users/{listing.seller_id}",
+                                headers={"Accept": "application/json"}, timeout=30)
+        if resp.status_code != 200:
+            return  # the item page's review count is still there
+        user = (resp.json() or {}).get("user") or {}
+        city = (user.get("city") or "").strip()
+        country = (user.get("country_title_local") or user.get("country_title") or "").strip()
+        listing.location = ", ".join(x for x in (city, country) if x) or None
+        if "feedback_count" in user:
+            listing.signals["seller_reviews"] = int(user.get("feedback_count") or 0)
+            listing.signals["seller_rating"] = float(user.get("feedback_reputation") or 0)
+            listing.signals["seller_negative_reviews"] = int(user.get("negative_feedback_count") or 0)
 
     @staticmethod
     def ids_per_day(state, newest, now):
@@ -204,5 +226,6 @@ class VintedProvider(Provider):
                 currency=(price.get("currencyCode") or "").upper() or None,
                 image_url=item.get("thumbnailUrl"),
                 posted_at=posted_at.replace(microsecond=0) if posted_at else None,
+                seller_id=str((item.get("user") or {}).get("id") or "") or None,
             ))
         return listings

@@ -157,8 +157,9 @@ def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct,
                 if drop_pct >= drop_min_pct and not is_baseline and search["notify_price_drops"]:
                     drops.append({**item, "old_price": row["price"], "drop_pct": drop_pct})
         db.execute(
-            "UPDATE listings SET title = ?, url = ?, image_url = ?, price = ?, currency = ?, location = ?,"
-            " posted_at = COALESCE(?, posted_at), last_seen = ?, risk_level = ?, risk_score = ?,"
+            "UPDATE listings SET title = ?, url = ?, image_url = ?, price = ?, currency = ?,"
+            " location = COALESCE(?, location), posted_at = COALESCE(?, posted_at), last_seen = ?,"
+            " risk_level = ?, risk_score = ?,"
             " risk_reasons = ?, risk_signals = ? WHERE id = ?",
             (l.title[:500], l.url, l.image_url, l.price, l.currency, (l.location or None) and l.location[:200],
              to_db_time(l.posted_at), stamp) + risk_values + (row["id"],))

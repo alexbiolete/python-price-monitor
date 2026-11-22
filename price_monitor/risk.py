@@ -100,6 +100,11 @@ def assess(signals, price_ron, typical, fmt_price):
         score += 1
         reasons.append(f"seller rated {signals['seller_rating'] * 5:.1f}/5")
 
+    negative = signals.get("seller_negative_reviews") or 0
+    if negative >= 2 and reviews and negative / reviews >= 0.1:
+        score += 1
+        reasons.append(f"seller has {negative} negative reviews out of {reviews}")
+
     phrases = signals.get("phrases") or []
     score += 2 * min(len(phrases), 2)
     reasons += phrases

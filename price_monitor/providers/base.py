@@ -40,6 +40,8 @@ class Listing:
     # Possible-scam signals the platform shows (see risk.py): account_age_days, seller_reviews,
     # seller_rating (0-1), photos, unprotected, contact_in_text, and "description" (text, not stored)
     signals: dict = field(default_factory=dict)
+    # The seller's id on the platform, for enrich() to look up (e.g. their location); never stored
+    seller_id: Optional[str] = None
 
 
 def parse_iso_utc(value):
