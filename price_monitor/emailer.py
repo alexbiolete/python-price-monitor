@@ -118,7 +118,8 @@ def render_digest(reports, dashboard_url=None):
     # A small label above the heading ("PRICE MONITOR"); empty: none. And an optional start for the
     # subject ("Deals: 3 new…")
     kicker = setting("EMAIL_KICKER", "Price monitor")
-    # Which copy sent it (ENVIRONMENT, e.g. Production on the server, Local on a laptop), next to
+    # Which copy sent it (ENVIRONMENT, e.g. production on the server, local on a laptop; shown in
+    # capitals like the label), next to
     # the label; unset: the machine's name
     environment = setting("ENVIRONMENT", socket.gethostname().split(".")[0])
     prefix = setting("EMAIL_SUBJECT_PREFIX", "")
