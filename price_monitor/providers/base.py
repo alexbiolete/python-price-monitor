@@ -73,6 +73,8 @@ class Provider:
     # Seconds between pages of one search, and between searches on this platform
     page_delay = 2
     search_delay = 3
+    # A search on this platform runs at most this often, whatever its interval (0: no limit)
+    min_interval_minutes = 0
 
     def __init__(self):
         self.log = logging.getLogger(f"price_monitor.{self.name}")

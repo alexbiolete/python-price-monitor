@@ -109,27 +109,27 @@ the item was uploaded, which tightens the age check.
 
 `facebook`: a Marketplace search with your filters set
 (`https://www.facebook.com/marketplace/bucharest/search/?query=...&minPrice=...&daysSinceListed=30`).
-It reads the results embedded in the page, logged out: no account is used. Facebook only shows them
-to logged-out visitors from some connections. A home connection works; the server gets the login
-page. So Facebook runs on a laptop, not the server (see below). One results page per run (about 20
-listings), sold and pending ones skipped, posting dates exact; the seller's name isn't kept.
+It reads the results embedded in the page: one page per run (about 20 listings), sold and pending
+ones skipped, posting dates exact, the seller's name not kept, and at most every 30 minutes.
+Facebook shows them to logged-out visitors only from some connections (a home one, not the
+server), so on the server it uses a logged-in session: put a browser's facebook.com cookies in
+`.env.server` as `FACEBOOK_COOKIES="c_user=...; xs=...; datr=..."` (ideally a spare account's:
+automated use is against Facebook's terms, and a session used from a datacenter may get security
+checks or a lock), then `./deploy.sh`. When the session expires or Facebook asks for a check, the
+search's error says so in the dashboard.
 
 ### Server and laptop
 
-Each copy of the monitor runs only the platforms in its `PLATFORMS`, so nothing runs twice:
-
-- the server: `PLATFORMS=olx,vinted` (in `.env.server`), from cron every 5 minutes
-- your laptop: `PLATFORMS=facebook` (in `.env`), when you start it
+Each copy runs only the platforms in its `PLATFORMS`, so nothing runs twice. The server runs
+`olx,vinted,facebook` from cron; a laptop has `PLATFORMS=none` and runs things only by hand:
 
 ```bash
-.venv/bin/python -m price_monitor --import searches.facebook.example.json   # once
-.venv/bin/python -m price_monitor                                          # keep checking Facebook
-.venv/bin/python -m price_monitor --once --platforms facebook --search 2   # one search, now
+.venv/bin/python -m price_monitor --once --platforms facebook             # Facebook, logged out, from home
+.venv/bin/python -m price_monitor --once --platforms facebook --search 2  # one search
 ```
 
-The laptop keeps its own data in `price_monitor.db` and sends its own email.
-"Run all now" in the dashboard becomes a request on every search, so each copy
-runs its own share when it next checks.
+A laptop keeps its own data in `price_monitor.db` and sends its own email (marked `local`).
+"Run all now" in the dashboard becomes a request on every search, so each copy runs its own share.
 
 ### Adding a platform
 

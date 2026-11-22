@@ -1,10 +1,15 @@
-"""Facebook Marketplace, logged out, from the results embedded in its search page.
+"""Facebook Marketplace, from the results embedded in its search page.
 
 Facebook shows Marketplace searches to logged-out visitors only from some
 connections: a home connection works, a server's (datacenter) doesn't; there it
-redirects to the login page. So this module is meant to run on your own
-computer, with PLATFORMS=facebook there and Facebook left out of the server's
-PLATFORMS. It never logs in.
+redirects to the login page. For a server, put a logged-in session's cookies in
+FACEBOOK_COOKIES (from a browser: c_user, xs, datr, as "c_user=...; xs=...;
+datr=..."), ideally of a spare account: automated use is against Facebook's
+terms, and a session used from a datacenter may get security checks or a lock.
+FACEBOOK_USER_AGENT can match the browser the cookies came from. Without
+cookies it runs logged out (fine at home). It never handles a password.
+
+Searches run at most every 30 minutes (min_interval_minutes), one page each.
 
 query_url: a Marketplace search from the browser, filters set, e.g.
   https://www.facebook.com/marketplace/bucharest/search/?query=playstation%205&minPrice=1500&maxPrice=2500&daysSinceListed=30
@@ -15,6 +20,7 @@ listings are skipped. The seller's name, which the page includes, isn't kept.
 """
 
 import json
+import os
 import re
 from datetime import datetime, timezone
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -64,6 +70,17 @@ class FacebookProvider(Provider):
     name = "facebook"
     label = "Facebook"
     search_delay = 10
+    min_interval_minutes = 30
+
+    def prepare_session(self, session):
+        cookies = (os.getenv("FACEBOOK_COOKIES") or "").strip()
+        for part in cookies.split(";"):
+            if "=" in part:
+                key, value = part.split("=", 1)
+                session.cookies.set(key.strip(), value.strip(), domain=".facebook.com")
+        if os.getenv("FACEBOOK_USER_AGENT"):
+            session.headers["User-Agent"] = os.environ["FACEBOOK_USER_AGENT"]
+        self.logged_in = "c_user" in session.cookies
 
     def search(self, spec):
         parts = urlsplit(spec.query_url)
@@ -72,9 +89,16 @@ class FacebookProvider(Provider):
             raise ProviderError("query_url must be a Marketplace search "
                                 "(https://www.facebook.com/marketplace/<city>/search/?query=...)")
         resp = self.session.get(_newest_first(spec.query_url), headers=HEADERS, timeout=30)
-        if "/login" in urlsplit(resp.url).path or resp.status_code in (400, 401, 403):
-            raise ProviderError("Facebook wants a login from this connection (it does from servers). "
-                                "Run Facebook searches from a home connection: PLATFORMS=facebook there.")
+        path = urlsplit(resp.url).path
+        if "/checkpoint" in path:
+            raise ProviderError("Facebook wants the account confirmed (a security check). Log into it in a "
+                                "browser, pass the check, then refresh FACEBOOK_COOKIES and deploy.")
+        if "/login" in path or resp.status_code in (400, 401, 403):
+            raise ProviderError(
+                "Facebook's session expired or was logged out: refresh FACEBOOK_COOKIES and deploy."
+                if self.logged_in else
+                "Facebook wants a login from this connection (it does from servers). Set FACEBOOK_COOKIES "
+                "(a logged-in session's cookies) in .env.server, or run Facebook from a home connection.")
         if resp.status_code == 429:
             raise ProviderError("Facebook is rate-limiting this connection; try a longer interval")
         resp.raise_for_status()

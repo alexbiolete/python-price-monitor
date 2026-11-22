@@ -38,7 +38,8 @@
       "caut",
       "schimb"
     ],
-    "sort_order": 50
+    "sort_order": 50,
+    "interval_minutes": 60
   },
   {
     "platform": "facebook",
@@ -76,6 +77,7 @@
       "caut",
       "schimb"
     ],
-    "sort_order": 60
+    "sort_order": 60,
+    "interval_minutes": 60
   }
 ]

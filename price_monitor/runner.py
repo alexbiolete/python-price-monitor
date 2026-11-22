@@ -69,7 +69,9 @@ def due_searches(searches, settings, now):
             due.append(s)
         else:
             last = from_db_time(s["last_run_at"])
-            interval = timedelta(minutes=s["interval_minutes"] or default_interval)
+            cls = get_provider_class(s["platform"])
+            minutes = max(s["interval_minutes"] or default_interval, cls.min_interval_minutes if cls else 0)
+            interval = timedelta(minutes=minutes)
             if last is None or now - last >= interval - DUE_SLACK:
                 due.append(s)
     return due
