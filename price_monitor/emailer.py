@@ -1,0 +1,184 @@
+"""The digest email. Its look copies codename-dojo's notification emails
+(apps/backend/src/common/email.ts: renderEmail) so both read as one system:
+same palette, wordmark, card, kicker/title/intro, pill buttons and footer."""
+
+import html
+import logging
+import os
+import smtplib
+import ssl
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.utils import formataddr
+
+log = logging.getLogger("price_monitor")
+
+# Same tones as the dashboard's emails (light only: mail apps differ too much on dark)
+ACCENT = "#4f7cf0"
+INK = "#18181b"
+MUTED = "#71717a"
+LINE = "#e4e4e7"
+SOFT = "#f4f4f5"
+GOOD = "#15803d"
+FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+
+
+def esc(s):
+    return html.escape(str(s), quote=True)
+
+
+def fmt_price(price, currency):
+    amount = f"{price:,.0f}".replace(",", ".")
+    return {"RON": f"{amount} lei", "EUR": f"{amount} €"}.get(currency, f"{amount} {currency}")
+
+
+def _plural(n, one, many):
+    return f"{n} {one if n == 1 else many}"
+
+
+def summary(n_new, n_drops):
+    parts = []
+    if n_new:
+        parts.append(_plural(n_new, "new listing", "new listings"))
+    if n_drops:
+        parts.append(_plural(n_drops, "price drop", "price drops"))
+    return ", ".join(parts)
+
+
+def setting(key, default):
+    return (os.getenv(key) or "").strip() or default
+
+
+def wordmark():
+    """The title at the top of the email (EMAIL_TITLE), like the dashboard's wordmark."""
+    return setting("EMAIL_TITLE", "Price monitor")
+
+
+def _listing_row(item, price_html):
+    thumb = ""
+    if item.get("image_url"):
+        thumb = (f'<td style="padding:12px 12px 12px 0;border-top:1px solid {LINE};width:56px;vertical-align:top">'
+                 f'<img src="{esc(item["image_url"])}" width="56" height="56" alt="" '
+                 f'style="display:block;width:56px;height:56px;border-radius:10px;object-fit:cover;background:{SOFT}"></td>')
+    meta = " · ".join(x for x in (item.get("location"), item.get("platform_label")) if x)
+    return (
+        "<tr>" + thumb +
+        f'<td style="padding:12px 0;border-top:1px solid {LINE};vertical-align:top">'
+        f'<a href="{esc(item["url"])}" style="color:{INK};font-size:14px;font-weight:600;line-height:1.4;text-decoration:none">{esc(item["title"])}</a>'
+        + (f'<div style="margin-top:2px;color:{MUTED};font-size:12px">{esc(meta)}</div>' if meta else "")
+        + f'<div style="margin-top:4px"><a href="{esc(item["url"])}" style="color:{ACCENT};font-size:12px;font-weight:600;text-decoration:none">View listing →</a></div>'
+        "</td>"
+        f'<td align="right" style="padding:12px 0 12px 12px;border-top:1px solid {LINE};vertical-align:top;white-space:nowrap;font-size:14px;color:{INK}">{price_html}</td>'
+        "</tr>"
+    )
+
+
+def _section(title, rows):
+    return (f'<div style="margin-top:24px;color:{MUTED};font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase">{esc(title)}</div>'
+            f'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:8px;border-bottom:1px solid {LINE}">{"".join(rows)}</table>')
+
+
+def render_digest(reports, dashboard_url=None):
+    """reports: [{"search": {...}, "new": [...], "drops": [...]}] -> (subject, html, text)"""
+    n_new = sum(len(r["new"]) for r in reports)
+    n_drops = sum(len(r["drops"]) for r in reports)
+    names = [r["search"]["name"] for r in reports]
+    title = summary(n_new, n_drops)
+    title = title[0].upper() + title[1:]
+    intro = ("From " + ", ".join(names)) if len(names) <= 3 else f"From {len(names)} searches"
+    # Optional: a small label above the heading, and a start for the subject ("Deals: 3 new…")
+    kicker = setting("EMAIL_KICKER", "")
+    prefix = setting("EMAIL_SUBJECT_PREFIX", "")
+    footer = setting("EMAIL_FOOTER", "A notification from your price monitor.")
+    subject = f"{prefix}: {summary(n_new, n_drops)}" if prefix else title
+
+    body, text = [], [title, "", intro]
+    for r in reports:
+        s = r["search"]
+        body.append(f'<h2 style="margin:32px 0 0;color:{INK};font-size:17px;line-height:1.3;font-weight:700">{esc(s["name"])}'
+                    f'<span style="color:{MUTED};font-size:13px;font-weight:500"> · {esc(s["platform_label"])}</span></h2>')
+        text += ["", f"== {s['name']} ({s['platform_label']})"]
+        if r["drops"]:
+            rows = []
+            for d in sorted(r["drops"], key=lambda d: d["price_ron"]):
+                rows.append(_listing_row(d,
+                    f'<span style="color:{MUTED};text-decoration:line-through;font-size:12px">{fmt_price(d["old_price"], d["currency"])}</span><br>'
+                    f'<b>{fmt_price(d["price"], d["currency"])}</b><br>'
+                    f'<span style="color:{GOOD};font-size:12px;font-weight:600">−{d["drop_pct"]:.0f}%</span>'))
+                text.append(f"  ↓ {d['title']}: {fmt_price(d['old_price'], d['currency'])} -> "
+                            f"{fmt_price(d['price'], d['currency'])} (-{d['drop_pct']:.0f}%) {d['url']}")
+            body.append(_section("Price drops", rows))
+        if r["new"]:
+            rows = [_listing_row(n, f'<b>{fmt_price(n["price"], n["currency"])}</b>')
+                    for n in sorted(r["new"], key=lambda n: n["price_ron"])]
+            text += [f"  + {n['title']}: {fmt_price(n['price'], n['currency'])} {n['url']}"
+                     for n in sorted(r["new"], key=lambda n: n["price_ron"])]
+            body.append(_section("New listings", rows))
+
+    button = ""
+    if dashboard_url:
+        button = (f'<div style="margin-top:28px"><a href="{esc(dashboard_url)}" style="display:inline-block;margin:0 8px 8px 0;'
+                  f'padding:11px 20px;border-radius:999px;background:{ACCENT};color:#ffffff;font-size:14px;font-weight:600;'
+                  f'text-decoration:none">Open in dashboard</a></div>')
+        text += ["", f"Open in dashboard: {dashboard_url}"]
+    note = "You get this when a search finds a new listing, or a price drops by the threshold set for the monitor."
+    text += ["", note, "", footer]
+
+    page = f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light only">
+<meta name="supported-color-schemes" content="light">
+<title>{esc(title)}</title>
+</head>
+<body style="margin:0;padding:0;background:{SOFT};font-family:{FONT};-webkit-font-smoothing:antialiased">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0">{esc(intro)}</div>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:{SOFT}">
+  <tr><td align="center" style="padding:32px 16px">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px">
+      <tr><td align="center" style="padding:8px 4px 28px;color:{INK};font-size:28px;line-height:1.2;font-weight:800;letter-spacing:-0.02em">{esc(wordmark())}</td></tr>
+      <tr><td style="background:#ffffff;border-radius:20px;padding:32px">
+        {f'<div style="margin:0 0 8px;color:{ACCENT};font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase">{esc(kicker)}</div>' if kicker else ''}
+        <h1 style="margin:0;color:{INK};font-size:22px;line-height:1.3;font-weight:700">{esc(title)}</h1>
+        <p style="margin:8px 0 0;color:{MUTED};font-size:15px;line-height:1.5">{esc(intro)}</p>
+        {"".join(body)}
+        {button}
+        <p style="margin:20px 0 0;color:{MUTED};font-size:13px;line-height:1.5">{esc(note)}</p>
+      </td></tr>
+      <tr><td align="center" style="padding:20px 4px 0;color:#a1a1aa;font-size:12px;line-height:1.5">{esc(footer)}</td></tr>
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>"""
+    return subject, page, "\n".join(text)
+
+
+def send_email(subject, html_body, text_body, to):
+    host = os.getenv("SMTP_HOST")
+    port = int(os.getenv("SMTP_PORT") or 587)
+    user = os.getenv("SMTP_USER")
+    password = os.getenv("SMTP_PASS")
+    if not all([host, user, password, to]):
+        log.warning("SMTP settings or recipient missing; printing the email instead")
+        print(f"Subject: {subject}\nTo: {to}\n\n{text_body}")
+        return False
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    from_name = setting("EMAIL_FROM_NAME", wordmark())
+    from_addr = setting("EMAIL_FROM_ADDRESS", user)
+    msg["From"] = formataddr((from_name, from_addr))
+    msg["To"] = to
+    msg.attach(MIMEText(text_body, "plain", "utf-8"))
+    msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+    recipients = [a.strip() for a in to.split(",") if a.strip()]
+    with smtplib.SMTP(host, port, timeout=30) as smtp:
+        smtp.starttls(context=ssl.create_default_context())
+        smtp.login(user, password)
+        smtp.sendmail(from_addr or user, recipients, msg.as_string())
+    log.info("Email sent to %s: %s", to, subject)
+    return True
