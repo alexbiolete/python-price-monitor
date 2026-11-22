@@ -7,6 +7,7 @@ options:   {"category_id": 1878}  optional; auto-detected from the page otherwis
 
 import re
 from collections import Counter
+from datetime import datetime
 from urllib.parse import parse_qsl, urlsplit
 
 from .base import Listing, Provider, ProviderError, parse_iso_utc
@@ -109,6 +110,14 @@ class OlxProvider(Provider):
         photos = offer.get("photos") or []
         if photos and photos[0].get("link"):
             image = photos[0]["link"].replace("{width}", "400").replace("{height}", "300")
+        signals = {"photos": len(photos), "description": offer.get("description") or ""}
+        created = parse_iso_utc((offer.get("user") or {}).get("created"))
+        if created:
+            signals["account_age_days"] = max(0, (datetime.utcnow() - created).days)
+        contact = offer.get("contact") or {}
+        # OLX delivery (protected payment) off. A phone number in an OLX ad is normal (OLX shows
+        # phones itself), so it isn't a signal here; WhatsApp and the like are caught by the phrases
+        signals["unprotected"] = not contact.get("courier")
         return Listing(
             external_id=str(offer["id"]),
             title=(offer.get("title") or "").strip(),
@@ -118,4 +127,5 @@ class OlxProvider(Provider):
             location=((offer.get("location") or {}).get("city") or {}).get("name"),
             image_url=image,
             posted_at=parse_iso_utc(offer.get("created_time")),
+            signals=signals,
         )

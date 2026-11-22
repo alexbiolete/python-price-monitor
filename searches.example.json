@@ -31,7 +31,8 @@
       "sticker",
       "cumpar"
     ],
-    "interval_minutes": null
+    "interval_minutes": null,
+    "sort_order": 10
   },
   {
     "platform": "olx",
@@ -61,55 +62,8 @@
       "husa",
       "cumpar"
     ],
-    "interval_minutes": null
-  },
-  {
-    "platform": "vinted",
-    "name": "PlayStation 5",
-    "query_url": "https://www.vinted.ro/catalog?search_text=playstation%205&price_from=1500&price_to=2500&currency=RON&order=newest_first",
-    "min_price": 1500,
-    "max_price": 2500,
-    "include_keywords": [
-      "ps5",
-      "ps 5",
-      "playstation 5",
-      "play station 5",
-      "playstation5"
-    ],
-    "exclude_keywords": [
-      "ps4",
-      "playstation 4",
-      "portal",
-      "vr2",
-      "psvr",
-      "volan",
-      "doar controller",
-      "dualsense",
-      "casti",
-      "headset",
-      "stand",
-      "suport",
-      "incarcator",
-      "statie",
-      "cablu",
-      "skin",
-      "sticker",
-      "husa",
-      "cumpar",
-      "pad",
-      "kontroler",
-      "controller",
-      "ssd",
-      "gra",
-      "joc",
-      "kupię",
-      "kupie",
-      "szukam",
-      "ζητείται",
-      "ζητειται",
-      "αγοράζω",
-      "cumpăr"
-    ]
+    "interval_minutes": null,
+    "sort_order": 20
   },
   {
     "platform": "vinted",
@@ -158,6 +112,56 @@
       "ζητειται",
       "αγοράζω",
       "cumpăr"
-    ]
+    ],
+    "sort_order": 30
+  },
+  {
+    "platform": "vinted",
+    "name": "PlayStation 5",
+    "query_url": "https://www.vinted.ro/catalog?search_text=playstation%205&price_from=1500&price_to=2500&currency=RON&order=newest_first",
+    "min_price": 1500,
+    "max_price": 2500,
+    "include_keywords": [
+      "ps5",
+      "ps 5",
+      "playstation 5",
+      "play station 5",
+      "playstation5"
+    ],
+    "exclude_keywords": [
+      "ps4",
+      "playstation 4",
+      "portal",
+      "vr2",
+      "psvr",
+      "volan",
+      "doar controller",
+      "dualsense",
+      "casti",
+      "headset",
+      "stand",
+      "suport",
+      "incarcator",
+      "statie",
+      "cablu",
+      "skin",
+      "sticker",
+      "husa",
+      "cumpar",
+      "pad",
+      "kontroler",
+      "controller",
+      "ssd",
+      "gra",
+      "joc",
+      "kupię",
+      "kupie",
+      "szukam",
+      "ζητείται",
+      "ζητειται",
+      "αγοράζω",
+      "cumpăr"
+    ],
+    "sort_order": 40
   }
 ]

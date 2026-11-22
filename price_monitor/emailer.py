@@ -20,6 +20,11 @@ MUTED = "#71717a"
 LINE = "#e4e4e7"
 SOFT = "#f4f4f5"
 GOOD = "#15803d"
+WARN_BG = "#fef3c7"
+WARN_INK = "#92400e"
+DANGER_BG = "#fee2e2"
+DANGER_INK = "#991b1b"
+SHOWN_RISK = ("medium", "high")  # "low" is stored and shown in the dashboard, not emailed
 FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
 
 
@@ -66,11 +71,28 @@ def _listing_row(item, price_html):
         f'<td style="padding:12px 0;border-top:1px solid {LINE};vertical-align:top">'
         f'<a href="{esc(item["url"])}" style="color:{INK};font-size:14px;font-weight:600;line-height:1.4;text-decoration:none">{esc(item["title"])}</a>'
         + (f'<div style="margin-top:2px;color:{MUTED};font-size:12px">{esc(meta)}</div>' if meta else "")
+        + _risk_html(item)
         + f'<div style="margin-top:4px"><a href="{esc(item["url"])}" style="color:{ACCENT};font-size:12px;font-weight:600;text-decoration:none">View listing →</a></div>'
         "</td>"
         f'<td align="right" style="padding:12px 0 12px 12px;border-top:1px solid {LINE};vertical-align:top;white-space:nowrap;font-size:14px;color:{INK}">{price_html}</td>'
         "</tr>"
     )
+
+
+def _risk_html(item):
+    level, reasons = item.get("risk_level"), item.get("risk_reasons") or []
+    if level not in SHOWN_RISK or not reasons:
+        return ""
+    bg, ink = (DANGER_BG, DANGER_INK) if level == "high" else (WARN_BG, WARN_INK)
+    label = "Likely scam" if level == "high" else "Possible scam"
+    return (f'<div style="margin-top:6px;padding:6px 10px;border-radius:10px;background:{bg};color:{ink};font-size:12px;line-height:1.45">'
+            f'<b>⚠ {label}:</b> {esc("; ".join(reasons))}</div>')
+
+
+def _risk_text(item):
+    if item.get("risk_level") not in SHOWN_RISK or not item.get("risk_reasons"):
+        return ""
+    return f"\n      ⚠ {'Likely' if item['risk_level'] == 'high' else 'Possible'} scam: {'; '.join(item['risk_reasons'])}"
 
 
 def _section(title, rows):
@@ -86,6 +108,9 @@ def render_digest(reports, dashboard_url=None):
     title = summary(n_new, n_drops)
     title = title[0].upper() + title[1:]
     intro = ("From " + ", ".join(names)) if len(names) <= 3 else f"From {len(names)} searches"
+    flagged = sum(1 for r in reports for x in r["new"] + r["drops"] if x.get("risk_level") in SHOWN_RISK)
+    if flagged:
+        intro += f" · {flagged} flagged as {'a possible scam' if flagged == 1 else 'possible scams'}"
     # Optional: a small label above the heading, and a start for the subject ("Deals: 3 new…")
     kicker = setting("EMAIL_KICKER", "")
     prefix = setting("EMAIL_SUBJECT_PREFIX", "")
@@ -106,12 +131,12 @@ def render_digest(reports, dashboard_url=None):
                     f'<b>{fmt_price(d["price"], d["currency"])}</b><br>'
                     f'<span style="color:{GOOD};font-size:12px;font-weight:600">−{d["drop_pct"]:.0f}%</span>'))
                 text.append(f"  ↓ {d['title']}: {fmt_price(d['old_price'], d['currency'])} -> "
-                            f"{fmt_price(d['price'], d['currency'])} (-{d['drop_pct']:.0f}%) {d['url']}")
+                            f"{fmt_price(d['price'], d['currency'])} (-{d['drop_pct']:.0f}%) {d['url']}" + _risk_text(d))
             body.append(_section("Price drops", rows))
         if r["new"]:
             rows = [_listing_row(n, f'<b>{fmt_price(n["price"], n["currency"])}</b>')
                     for n in sorted(r["new"], key=lambda n: n["price_ron"])]
-            text += [f"  + {n['title']}: {fmt_price(n['price'], n['currency'])} {n['url']}"
+            text += [f"  + {n['title']}: {fmt_price(n['price'], n['currency'])} {n['url']}" + _risk_text(n)
                      for n in sorted(r["new"], key=lambda n: n["price_ron"])]
             body.append(_section("New listings", rows))
 

@@ -8,7 +8,7 @@ providers/__init__.py; its `name` is the value of searches.platform.
 
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -37,6 +37,9 @@ class Listing:
     location: Optional[str] = None
     image_url: Optional[str] = None
     posted_at: Optional[datetime] = None  # when the ad was posted (naive UTC); None: the platform doesn't say
+    # Possible-scam signals the platform shows (see risk.py): account_age_days, seller_reviews,
+    # seller_rating (0-1), photos, unprotected, contact_in_text, and "description" (text, not stored)
+    signals: dict = field(default_factory=dict)
 
 
 def parse_iso_utc(value):
@@ -90,3 +93,12 @@ class Provider:
 
     def search(self, spec: SearchSpec) -> list:
         raise NotImplementedError
+
+    # Some platforms show more on an item's own page (its description, the seller's reviews, when
+    # it was posted). The runner calls enrich() only for listings it hasn't stored yet and that
+    # pass the search's filters, at most max_enrich per search per run, to keep traffic low.
+    needs_enrich = False
+    max_enrich = 15
+
+    def enrich(self, listing: Listing) -> None:
+        """Hook: fill listing.signals (and posted_at) from the item's page."""

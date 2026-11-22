@@ -5,6 +5,8 @@
   python -m price_monitor --test-email      email the latest stored listings, to check delivery
   python -m price_monitor --import FILE     add the searches in a JSON file to the database
   python -m price_monitor --status          print the searches and their last run
+  python -m price_monitor --resend-all      clear the stored listings, then run every search and
+                                            email everything that matches now (one full digest)
 """
 
 import json
@@ -16,7 +18,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from .db import Db
+from .db import Db, to_db_time, utcnow
 from .emailer import render_digest, send_email
 from .providers import PROVIDERS, get_provider_class
 from .runner import env_number, tick, to_ron
@@ -51,16 +53,32 @@ def import_searches(db, path):
             options["category_id"] = s["category_id"]
         db.execute(
             "INSERT INTO searches (platform, name, query_url, min_price, max_price, include_keywords,"
-            " exclude_keywords, options, enabled, interval_minutes, max_age_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " exclude_keywords, options, enabled, interval_minutes, max_age_days, sort_order)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (platform, s["name"], url, s.get("min_price"), s.get("max_price"),
              json.dumps(s.get("include_keywords") or [], ensure_ascii=False),
              json.dumps(s.get("exclude_keywords") or s.get("exclude") or [], ensure_ascii=False),
              json.dumps(options) if options else None, 1 if s.get("enabled", True) else 0,
-             s.get("interval_minutes"), s.get("max_age_days")))
+             s.get("interval_minutes"), s.get("max_age_days"), s.get("sort_order", 100)))
         added += 1
         log.info("Added %s (%s)", s["name"], platform)
     db.commit()
     log.info("Imported %d searches", added)
+
+
+def resend_all(db):
+    """Forget what was stored and send it all again: the listings (and their price history) are
+    deleted, every search keeps a baseline date so its next run reports everything as new, and
+    that run happens now."""
+    n = db.one("SELECT COUNT(*) AS n FROM listings")["n"]
+    db.execute("DELETE FROM price_history")
+    db.execute("DELETE FROM listings")
+    stamp = to_db_time(utcnow())
+    db.execute("UPDATE searches SET baseline_at = COALESCE(baseline_at, ?)", (stamp,))
+    db.execute("UPDATE settings SET run_requested_at = ? WHERE id = 1", (stamp,))
+    db.commit()
+    log.info("Cleared %d stored listings; running every search now", n)
+    tick(db)
 
 
 def print_status(db):
@@ -68,7 +86,7 @@ def print_status(db):
     print(f"Monitor {'on' if settings['enabled'] else 'OFF'}; default interval {settings['default_interval_minutes']} min;"
           f" ads up to {settings['default_max_age_days']} days old;"
           f" last tick {settings['last_tick_at'] or 'never'} UTC; database: {db.kind}")
-    for s in db.all("SELECT * FROM searches ORDER BY platform, id"):
+    for s in db.all("SELECT * FROM searches ORDER BY sort_order, id"):
         n = db.one("SELECT COUNT(*) AS n FROM listings WHERE search_id = ?", (s["id"],))["n"]
         print(f"  #{s['id']:<3} {'on ' if s['enabled'] else 'off'} {s['platform']:<8} {s['name']:<28}"
               f" every {s['interval_minutes'] or settings['default_interval_minutes']} min,"
@@ -80,7 +98,7 @@ def print_status(db):
 def test_email(db):
     eur = env_number("EUR_TO_RON", 4.97)
     reports = []
-    for s in db.all("SELECT * FROM searches ORDER BY platform, id"):
+    for s in db.all("SELECT * FROM searches ORDER BY sort_order, id"):
         cls = get_provider_class(s["platform"])
         label = cls.label if cls else s["platform"]
         rows = db.all("SELECT * FROM listings WHERE search_id = ? ORDER BY first_seen DESC LIMIT 5", (s["id"],))
@@ -105,6 +123,9 @@ def main(argv):
             if i + 1 >= len(argv):
                 raise SystemExit("Usage: python -m price_monitor --import FILE")
             import_searches(db, argv[i + 1])
+            return 0
+        if "--resend-all" in argv:
+            resend_all(db)
             return 0
         if "--status" in argv:
             print_status(db)

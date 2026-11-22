@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # Columns added after the first version: (table, column, MySQL type, SQLite type).
 # Added on start when missing, so an existing database upgrades itself.
@@ -20,6 +20,12 @@ ADDED_COLUMNS = [
     ("listings", "posted_at", "DATETIME NULL", "TEXT"),
     ("searches", "max_age_days", "INT NULL", "INTEGER"),
     ("settings", "default_max_age_days", "INT NOT NULL DEFAULT 30", "INTEGER NOT NULL DEFAULT 30"),
+    # v3: possible-scam flags on listings (risk.py), and the searches' order (lower first)
+    ("listings", "risk_level", "VARCHAR(10) NULL", "TEXT"),
+    ("listings", "risk_score", "INT NULL", "INTEGER"),
+    ("listings", "risk_reasons", "TEXT NULL", "TEXT"),
+    ("listings", "risk_signals", "TEXT NULL", "TEXT"),
+    ("searches", "sort_order", "INT NOT NULL DEFAULT 100", "INTEGER NOT NULL DEFAULT 100"),
 ]
 
 MYSQL_SCHEMA = [

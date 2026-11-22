@@ -3,6 +3,8 @@
 #
 #   ./deploy.sh            copy the code + .env, set up the venv, install the cron job
 #   ./deploy.sh --remove   remove the cron job (leaves the files in place)
+#   ./deploy.sh --resend   deploy, then clear the stored listings and email everything that
+#                          matches now (python -m price_monitor --resend-all on the server)
 #
 # Re-run after changing the code or .env. Searches, intervals and on/off live in
 # the database (edit them in the dashboard), so changing those needs no deploy.
@@ -51,6 +53,11 @@ ssh "$HOST" "cd ~/$REMOTE_DIR && { [ -x .venv/bin/python ] || $PYTHON -m venv .v
 echo "==> Installing cron job"
 ssh "$HOST" "{ crontab -l 2>/dev/null | grep -vF '$CRON_TAG'; echo '$CRON_LINE'; } | crontab -"
 ssh "$HOST" "crontab -l | grep -F '$CRON_TAG'"
+
+if [[ "${1:-}" == "--resend" ]]; then
+  echo "==> Clearing the stored listings and sending everything again"
+  ssh "$HOST" "cd ~/$REMOTE_DIR && timeout 600 .venv/bin/python -W ignore -m price_monitor --resend-all 2>&1 | tee -a ~/$LOG"
+fi
 
 echo "==> Done. Status: ssh $HOST 'cd $REMOTE_DIR && .venv/bin/python -m price_monitor --status'"
 echo "    Logs:   ssh $HOST tail -f $LOG"

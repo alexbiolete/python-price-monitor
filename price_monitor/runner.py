@@ -15,7 +15,8 @@ import time
 from datetime import timedelta
 
 from .db import from_db_time, json_list, json_object, to_db_time, utcnow
-from .emailer import render_digest, send_email
+from . import risk
+from .emailer import fmt_price, render_digest, send_email
 from .providers import PROVIDERS, get_provider_class
 from .providers.base import ProviderError, SearchSpec
 
@@ -60,18 +61,25 @@ def due_searches(searches, settings, now):
     return due
 
 
-def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct, max_age_days=None):
-    """Store matching listings; return what to report."""
+SKIP_MEMO = 1000  # old items whose page we've read, remembered per search so it isn't read again
+
+
+def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct, max_age_days=None,
+            provider=None, spec=None):
+    """Store matching listings, flag possible scams; return what to report."""
     is_baseline = search["baseline_at"] is None
     oldest = now - timedelta(days=max_age_days) if max_age_days else None
     includes = [k.lower() for k in json_list(search["include_keywords"]) if k.strip()]
     excludes = [k.lower() for k in json_list(search["exclude_keywords"]) if k.strip()]
     lo, hi = search["min_price"], search["max_price"]
     stamp = to_db_time(now)
-    new, drops = [], []
-    seen = set()
-    stats = {"matching": 0, "filtered": 0, "no_price": 0, "too_old": 0}
+    state = spec.state if spec is not None else {}
+    skipped_old = set(state.get("skipped_old") or [])
+    stats = {"matching": 0, "filtered": 0, "no_price": 0, "too_old": 0, "pages": 0}
+    fmt = lambda amount: fmt_price(amount, "RON")  # noqa: E731
 
+    # 1. The search's filters
+    candidates, seen = [], set()
     for l in listings:
         if l.price is None or not l.currency:
             stats["no_price"] += 1
@@ -79,8 +87,8 @@ def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct,
         if l.external_id in seen:
             continue  # the same ad on two pages (promoted ads repeat)
         seen.add(l.external_id)
-        if oldest and l.posted_at and l.posted_at < oldest:
-            stats["too_old"] += 1  # older than the search's age limit (ads without a date are kept)
+        if l.external_id in skipped_old or (oldest and l.posted_at and l.posted_at < oldest):
+            stats["too_old"] += 1  # older than the age limit (ads without a date are kept)
             continue
         price_ron = to_ron(l.price, l.currency, eur_to_ron)
         title = l.title.lower()
@@ -88,20 +96,53 @@ def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct,
                 or (lo is not None and price_ron < lo) or (hi is not None and price_ron > hi):
             stats["filtered"] += 1
             continue
+        candidates.append((l, price_ron))
+
+    # 2. What's typical here: the median of everything that matches (for "far below the typical price")
+    typical = risk.typical_price([p for _, p in candidates])
+    rows = {r["external_id"]: r for r in db.all(
+        "SELECT id, external_id, price, currency, risk_signals FROM listings WHERE search_id = ?", (search["id"],))}
+
+    new, drops = [], []
+    budget = provider.max_enrich if provider is not None and provider.needs_enrich else 0
+    for l, price_ron in candidates:
+        row = rows.get(l.external_id)
+        stored_signals = json_object(row["risk_signals"]) if row and row["risk_signals"] else None
+
+        # 3. The item's own page, for platforms that need it: new listings, or stored ones not read yet
+        if provider is not None and provider.needs_enrich and stored_signals is None:
+            if budget <= 0:
+                if row is None:
+                    continue  # read it on a later run, before it's reported
+            else:
+                budget -= 1
+                stats["pages"] += 1
+                provider.enrich(l)
+                if oldest and l.posted_at and l.posted_at < oldest:
+                    stats["too_old"] += 1
+                    skipped_old.add(l.external_id)
+                    if row is not None:
+                        db.execute("DELETE FROM listings WHERE id = ?", (row["id"],))
+                    continue
+        if stored_signals is not None and provider is not None and provider.needs_enrich:
+            signals = stored_signals  # read from its page before; the page isn't read again
+        else:
+            signals = risk.static_signals(l, search["platform"])
+        level, score, reasons = risk.assess(signals, price_ron, typical, fmt)
         stats["matching"] += 1
         item = {"title": l.title, "url": l.url, "image_url": l.image_url, "location": l.location,
                 "price": l.price, "currency": l.currency, "price_ron": price_ron,
-                "platform_label": platform_label}
+                "platform_label": platform_label, "risk_level": level, "risk_reasons": reasons}
+        risk_values = (level, score, json.dumps(reasons, ensure_ascii=False), json.dumps(signals, ensure_ascii=False))
 
-        row = db.one("SELECT id, price, currency FROM listings WHERE search_id = ? AND external_id = ?",
-                     (search["id"], l.external_id))
         if row is None:
             cur = db.execute(
                 "INSERT INTO listings (search_id, platform, external_id, title, url, image_url, price, currency,"
-                " location, posted_at, first_seen, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " location, posted_at, first_seen, last_seen, risk_level, risk_score, risk_reasons, risk_signals)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (search["id"], search["platform"], l.external_id, l.title[:500], l.url, l.image_url,
                  l.price, l.currency, (l.location or None) and l.location[:200], to_db_time(l.posted_at),
-                 stamp, stamp))
+                 stamp, stamp) + risk_values)
             db.execute("INSERT INTO price_history (listing_id, price, currency, seen_at) VALUES (?, ?, ?, ?)",
                        (cur.lastrowid, l.price, l.currency, stamp))
             if not is_baseline and search["notify_new"]:
@@ -117,10 +158,13 @@ def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct,
                     drops.append({**item, "old_price": row["price"], "drop_pct": drop_pct})
         db.execute(
             "UPDATE listings SET title = ?, url = ?, image_url = ?, price = ?, currency = ?, location = ?,"
-            " posted_at = COALESCE(?, posted_at), last_seen = ? WHERE id = ?",
+            " posted_at = COALESCE(?, posted_at), last_seen = ?, risk_level = ?, risk_score = ?,"
+            " risk_reasons = ?, risk_signals = ? WHERE id = ?",
             (l.title[:500], l.url, l.image_url, l.price, l.currency, (l.location or None) and l.location[:200],
-             to_db_time(l.posted_at), stamp, row["id"]))
+             to_db_time(l.posted_at), stamp) + risk_values + (row["id"],))
 
+    if skipped_old:
+        state["skipped_old"] = sorted(skipped_old)[-SKIP_MEMO:]
     if is_baseline:
         db.execute("UPDATE searches SET baseline_at = ? WHERE id = ?", (stamp, search["id"]))
     return new, drops, stats, is_baseline
@@ -139,7 +183,7 @@ def tick(db):
         log.info("The monitor is turned off in settings; nothing to do")
         return 0
 
-    searches = db.all("SELECT * FROM searches ORDER BY platform, id")
+    searches = db.all("SELECT * FROM searches ORDER BY sort_order, id")
     due = due_searches(searches, settings, now)
     if not due:
         log.info("No searches due (%d configured)", len(searches))
@@ -164,16 +208,20 @@ def tick(db):
                 raise ProviderError("options is not valid JSON")
 
             listings = provider.search(spec)
-            state_json = json.dumps(spec.state) if spec.state else None
             max_age = s.get("max_age_days") or settings.get("default_max_age_days")
-            new, drops, stats, baseline = process(db, s, listings, label, now, eur_to_ron, drop_min_pct, max_age)
+            new, drops, stats, baseline = process(db, s, listings, label, now, eur_to_ron, drop_min_pct, max_age,
+                                                  provider, spec)
+            state_json = json.dumps(spec.state) if spec.state else None
             result_count, match_count = len(listings), stats["matching"]
             status = "ok" if listings else "empty"
             error = None if listings else "The platform returned no results; check the search URL and filters"
-            log.info("[%s] %s: %d results, %d matching, %d filtered out, %d older than %s days, %d without price%s",
+            flagged = sum(1 for x in new + drops if x["risk_level"] in ("medium", "high"))
+            log.info("[%s] %s: %d results, %d matching, %d filtered out, %d older than %s days, %d without price,"
+                     " %d item pages read%s",
                      label, s["name"], len(listings), stats["matching"], stats["filtered"], stats["too_old"],
-                     max_age or "∞", stats["no_price"],
-                     " (baseline saved, no email)" if baseline else f"; {len(new)} new, {len(drops)} price drops")
+                     max_age or "∞", stats["no_price"], stats["pages"],
+                     " (baseline saved, no email)" if baseline
+                     else f"; {len(new)} new, {len(drops)} price drops, {flagged} flagged")
             if new or drops:
                 reports.append({"search": {**s, "platform_label": label}, "new": new, "drops": drops})
         except ProviderError as e:
