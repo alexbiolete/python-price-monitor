@@ -124,7 +124,8 @@ class OlxProvider(Provider):
             url=offer.get("url") or "",
             price=float(price) if price not in (None, "", 0) else None,
             currency=currency,
-            location=((offer.get("location") or {}).get("city") or {}).get("name"),
+            # "City, România", like Vinted's "City, Country" (OLX.ro is Romania only)
+            location=", ".join(x for x in (((offer.get("location") or {}).get("city") or {}).get("name"), "România") if x),
             image_url=image,
             posted_at=parse_iso_utc(offer.get("created_time")),
             signals=signals,
