@@ -28,7 +28,8 @@ cp .env.example .env                        # then fill it in
 | `EMAIL_TO` | Recipient(s), comma-separated. The dashboard can override it (`settings.email_to`) |
 | `EMAIL_TITLE` | The title at the top of the email |
 | `EMAIL_FROM_NAME`, `EMAIL_FROM_ADDRESS` | The sender shown in the inbox. The address defaults to `SMTP_USER` |
-| `EMAIL_KICKER`, `EMAIL_SUBJECT_PREFIX` | Optional: a small label above the heading, and a start for the subject |
+| `EMAIL_KICKER` | The small label above the heading (default "Price monitor"; empty: none). It stays out of the inbox preview |
+| `EMAIL_SUBJECT_PREFIX` | Optional: a start for the subject |
 | `EMAIL_FOOTER` | The line under the email |
 | `DASHBOARD_URL` | The email's "Open in dashboard" button. Unset: no button |
 | `EUR_TO_RON` | Rate for the min/max price filters on EUR listings (default 4.97) |

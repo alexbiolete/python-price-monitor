@@ -24,7 +24,10 @@ WARN_BG = "#fef3c7"
 WARN_INK = "#92400e"
 DANGER_BG = "#fee2e2"
 DANGER_INK = "#991b1b"
-SHOWN_RISK = ("medium", "high")  # "low" is stored and shown in the dashboard, not emailed
+SHOWN_RISK = ("medium", "high")
+# After the hidden preview text: blank characters, so inbox previews stop there instead of running
+# on into the email's first visible words (the title, "PRICE MONITOR")
+PREVIEW_STOP = "&#847;&zwnj;&nbsp;" * 90  # "low" is stored and shown in the dashboard, not emailed
 FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
 
 
@@ -111,16 +114,14 @@ def render_digest(reports, dashboard_url=None):
     flagged = sum(1 for r in reports for x in r["new"] + r["drops"] if x.get("risk_level") in SHOWN_RISK)
     if flagged:
         intro += f" · {flagged} flagged as {'a possible scam' if flagged == 1 else 'possible scams'}"
-    # Optional: a small label above the heading, and a start for the subject ("Deals: 3 new…")
-    kicker = setting("EMAIL_KICKER", "")
+    # A small label above the heading ("PRICE MONITOR"); empty: none. And an optional start for the
+    # subject ("Deals: 3 new…")
+    kicker = setting("EMAIL_KICKER", "Price monitor")
     prefix = setting("EMAIL_SUBJECT_PREFIX", "")
     footer = setting("EMAIL_FOOTER", "A notification from your price monitor.")
-    # Next to the title at the top ("Biolete Tech · Price monitor"); empty: none
-    subtitle = setting("EMAIL_SUBTITLE", "Price monitor")
     subject = f"{prefix}: {summary(n_new, n_drops)}" if prefix else title
 
     body, text = [], [title, "", intro]
-    header = wordmark() + (f" · {subtitle}" if subtitle else "")
     for r in reports:
         s = r["search"]
         body.append(f'<h2 style="margin:24px 0 0;color:{INK};font-size:17px;line-height:1.3;font-weight:700">{esc(s["name"])}'
@@ -150,7 +151,7 @@ def render_digest(reports, dashboard_url=None):
                   f'text-decoration:none">Open in dashboard</a></div>')
         text += ["", f"Open in dashboard: {dashboard_url}"]
     note = "You get this when a search finds a new listing, or a price drops by the threshold set for the monitor."
-    text += ["", note, "", f"{footer} ({header})"]
+    text += ["", note, "", f"{footer} ({wordmark()}{f' · {kicker}' if kicker else ''})"]
 
     page = f"""<!doctype html>
 <html lang="en">
@@ -162,11 +163,11 @@ def render_digest(reports, dashboard_url=None):
 <title>{esc(title)}</title>
 </head>
 <body style="margin:0;padding:0;background:#ffffff;font-family:{FONT};-webkit-font-smoothing:antialiased">
-<div style="display:none;max-height:0;overflow:hidden;opacity:0">{esc(intro)}</div>
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all">{esc(intro)}{PREVIEW_STOP}</div>
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#ffffff">
   <tr><td align="center" style="padding:16px 12px">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px">
-      <tr><td style="padding:0 0 14px;border-bottom:1px solid {LINE};color:{INK};font-size:18px;line-height:1.3;font-weight:800;letter-spacing:-0.01em">{esc(wordmark())}{f'<span style="color:{MUTED};font-weight:500;letter-spacing:0"> · {esc(subtitle)}</span>' if subtitle else ''}</td></tr>
+      <tr><td align="center" style="padding:4px 0 18px;border-bottom:1px solid {LINE};color:{INK};font-size:28px;line-height:1.2;font-weight:800;letter-spacing:-0.02em">{esc(wordmark())}</td></tr>
       <tr><td style="padding:16px 0 0">
         {f'<div style="margin:0 0 6px;color:{ACCENT};font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase">{esc(kicker)}</div>' if kicker else ''}
         <h1 style="margin:0;color:{INK};font-size:20px;line-height:1.3;font-weight:700">{esc(title)}</h1>
