@@ -42,6 +42,8 @@ class Listing:
     signals: dict = field(default_factory=dict)
     # The seller's id on the platform, for enrich() to look up (e.g. their location); never stored
     seller_id: Optional[str] = None
+    # How price adds up, when it's more than the asking price (eBay: "219 € + 25 € shipping + …")
+    price_detail: Optional[str] = None
 
 
 def parse_iso_utc(value):

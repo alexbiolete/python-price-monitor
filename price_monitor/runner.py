@@ -21,7 +21,7 @@ import time
 from datetime import timedelta
 
 from .db import from_db_time, json_list, json_object, to_db_time, utcnow
-from . import risk
+from . import rates, risk
 from .emailer import fmt_price, render_digest, send_email
 from .providers import PROVIDERS, get_provider_class
 from .providers.base import ProviderError, SearchSpec
@@ -44,8 +44,9 @@ def env_number(key, default):
     return value
 
 
-def to_ron(price, currency, eur_to_ron):
-    return price * eur_to_ron if currency == "EUR" else price
+def to_ron(price, currency, eur_to_ron=None):
+    """Lei, for the searches' min/max (rates.py; EUR_TO_RON and the like in .env)"""
+    return rates.to_ron(price, currency)
 
 
 def allowed_platforms(platforms=None):
@@ -148,17 +149,18 @@ def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct,
         stats["matching"] += 1
         item = {"title": l.title, "url": l.url, "image_url": l.image_url, "location": l.location,
                 "price": l.price, "currency": l.currency, "price_ron": price_ron,
-                "platform_label": platform_label, "risk_level": level, "risk_reasons": reasons}
+                "platform_label": platform_label, "risk_level": level, "risk_reasons": reasons,
+                "price_detail": l.price_detail}
         risk_values = (level, score, json.dumps(reasons, ensure_ascii=False), json.dumps(signals, ensure_ascii=False))
 
         if row is None:
             cur = db.execute(
                 "INSERT INTO listings (search_id, platform, external_id, title, url, image_url, price, currency,"
-                " location, posted_at, first_seen, last_seen, risk_level, risk_score, risk_reasons, risk_signals)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " location, posted_at, first_seen, last_seen, risk_level, risk_score, risk_reasons, risk_signals,"
+                " price_detail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (search["id"], search["platform"], l.external_id, l.title[:500], l.url, l.image_url,
                  l.price, l.currency, (l.location or None) and l.location[:200], to_db_time(l.posted_at),
-                 stamp, stamp) + risk_values)
+                 stamp, stamp) + risk_values + ((l.price_detail or None) and l.price_detail[:300],))
             db.execute("INSERT INTO price_history (listing_id, price, currency, seen_at) VALUES (?, ?, ?, ?)",
                        (cur.lastrowid, l.price, l.currency, stamp))
             if not is_baseline and search["notify_new"]:
@@ -176,9 +178,9 @@ def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct,
             "UPDATE listings SET title = ?, url = ?, image_url = ?, price = ?, currency = ?,"
             " location = COALESCE(?, location), posted_at = COALESCE(?, posted_at), last_seen = ?,"
             " risk_level = ?, risk_score = ?,"
-            " risk_reasons = ?, risk_signals = ? WHERE id = ?",
+            " risk_reasons = ?, risk_signals = ?, price_detail = ? WHERE id = ?",
             (l.title[:500], l.url, l.image_url, l.price, l.currency, (l.location or None) and l.location[:200],
-             to_db_time(l.posted_at), stamp) + risk_values + (row["id"],))
+             to_db_time(l.posted_at), stamp) + risk_values + ((l.price_detail or None) and l.price_detail[:300], row["id"]))
 
     if skipped_old:
         state["skipped_old"] = sorted(skipped_old)[-SKIP_MEMO:]

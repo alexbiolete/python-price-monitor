@@ -93,6 +93,14 @@ def _risk_html(item):
             f'<b>⚠ {label}:</b> {esc("; ".join(reasons))}</div>')
 
 
+def _detail_html(item):
+    """How the price adds up (eBay's total), small under it"""
+    if not item.get("price_detail"):
+        return ""
+    return (f'<div style="margin-top:2px;color:{MUTED};font-size:11px;font-weight:400;white-space:normal;'
+            f'max-width:180px;line-height:1.35">{esc(item["price_detail"])}</div>')
+
+
 def _risk_text(item):
     if item.get("risk_level") not in SHOWN_RISK or not item.get("risk_reasons"):
         return ""
@@ -138,14 +146,15 @@ def render_digest(reports, dashboard_url=None):
                 rows.append(_listing_row(d,
                     f'<span style="color:{MUTED};text-decoration:line-through;font-size:12px">{fmt_price(d["old_price"], d["currency"])}</span><br>'
                     f'<b>{fmt_price(d["price"], d["currency"])}</b><br>'
-                    f'<span style="color:{GOOD};font-size:12px;font-weight:600">−{d["drop_pct"]:.0f}%</span>'))
+                    f'<span style="color:{GOOD};font-size:12px;font-weight:600">−{d["drop_pct"]:.0f}%</span>' + _detail_html(d)))
                 text.append(f"  ↓ {d['title']}: {fmt_price(d['old_price'], d['currency'])} -> "
                             f"{fmt_price(d['price'], d['currency'])} (-{d['drop_pct']:.0f}%) {d['url']}" + _risk_text(d))
             body.append(_section("Price drops", rows))
         if r["new"]:
-            rows = [_listing_row(n, f'<b>{fmt_price(n["price"], n["currency"])}</b>')
+            rows = [_listing_row(n, f'<b>{fmt_price(n["price"], n["currency"])}</b>' + _detail_html(n))
                     for n in sorted(r["new"], key=lambda n: n["price_ron"])]
-            text += [f"  + {n['title']}: {fmt_price(n['price'], n['currency'])} {n['url']}" + _risk_text(n)
+            text += [f"  + {n['title']}: {fmt_price(n['price'], n['currency'])}"
+                     + (f" ({n['price_detail']})" if n.get("price_detail") else "") + f" {n['url']}" + _risk_text(n)
                      for n in sorted(r["new"], key=lambda n: n["price_ron"])]
             body.append(_section("New listings", rows))
 

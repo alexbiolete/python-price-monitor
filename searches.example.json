@@ -66,6 +66,157 @@
     "sort_order": 20
   },
   {
+    "platform": "publi24",
+    "name": "Xbox Series X",
+    "query_url": "https://www.publi24.ro/anunturi/?q=xbox+series+x",
+    "min_price": 1500,
+    "max_price": 3000,
+    "include_keywords": [
+      "series x",
+      "seria x",
+      "series-x",
+      "seriesx"
+    ],
+    "exclude_keywords": [
+      "series s",
+      "seria s",
+      "one x",
+      "one s",
+      "xbox one",
+      "360",
+      "expansion",
+      "storage",
+      "card",
+      "volan",
+      "turtle beach",
+      "casti",
+      "headset",
+      "doar controller",
+      "stand",
+      "suport",
+      "incarcator",
+      "baterie",
+      "acumulator",
+      "cablu",
+      "skin",
+      "sticker",
+      "cumpar"
+    ],
+    "sort_order": 30
+  },
+  {
+    "platform": "publi24",
+    "name": "PlayStation 5",
+    "query_url": "https://www.publi24.ro/anunturi/?q=playstation+5",
+    "min_price": 1500,
+    "max_price": 2500,
+    "include_keywords": [
+      "ps5",
+      "ps 5",
+      "playstation 5",
+      "play station 5",
+      "playstation5"
+    ],
+    "exclude_keywords": [
+      "ps4",
+      "playstation 4",
+      "portal",
+      "vr2",
+      "psvr",
+      "volan",
+      "doar controller",
+      "dualsense",
+      "casti",
+      "headset",
+      "stand",
+      "suport",
+      "incarcator",
+      "statie",
+      "cablu",
+      "skin",
+      "sticker",
+      "husa",
+      "cumpar"
+    ],
+    "sort_order": 40
+  },
+  {
+    "platform": "ebay",
+    "name": "Xbox Series X",
+    "query_url": "https://www.ebay.de/sch/i.html?_nkw=xbox+series+x+konsole&_udlo=200&_udhi=650",
+    "min_price": 1500,
+    "max_price": 3000,
+    "include_keywords": [
+      "series x",
+      "seria x",
+      "series-x",
+      "seriesx"
+    ],
+    "exclude_keywords": [
+      "series s",
+      "one x",
+      "one s",
+      "xbox one",
+      "360",
+      "defekt",
+      "ersatzteile",
+      "for parts",
+      "broken",
+      "nur controller",
+      "controller only",
+      "suche",
+      "gesucht",
+      "hülle",
+      "ladestation",
+      "spiel",
+      "game only"
+    ],
+    "options": {
+      "duty_pct": 0
+    },
+    "interval_minutes": 30,
+    "sort_order": 50
+  },
+  {
+    "platform": "ebay",
+    "name": "PlayStation 5",
+    "query_url": "https://www.ebay.de/sch/i.html?_nkw=playstation+5+konsole&_udlo=200&_udhi=550",
+    "min_price": 1500,
+    "max_price": 2500,
+    "include_keywords": [
+      "ps5",
+      "ps 5",
+      "playstation 5",
+      "play station 5",
+      "playstation5"
+    ],
+    "exclude_keywords": [
+      "ps4",
+      "playstation 4",
+      "portal",
+      "vr2",
+      "psvr",
+      "dualsense",
+      "defekt",
+      "ersatzteile",
+      "for parts",
+      "broken",
+      "nur controller",
+      "controller only",
+      "suche",
+      "gesucht",
+      "hülle",
+      "ladestation",
+      "spiel",
+      "game only"
+    ],
+    "options": {
+      "duty_pct": 0
+    },
+    "interval_minutes": 30,
+    "sort_order": 60
+  },
+  {
     "platform": "vinted",
     "name": "Xbox Series X",
     "query_url": "https://www.vinted.ro/catalog?search_text=xbox%20series%20x&price_from=1500&price_to=3000&currency=RON&order=newest_first",
@@ -113,7 +264,7 @@
       "αγοράζω",
       "cumpăr"
     ],
-    "sort_order": 30
+    "sort_order": 70
   },
   {
     "platform": "vinted",
@@ -162,6 +313,6 @@
       "αγοράζω",
       "cumpăr"
     ],
-    "sort_order": 40
+    "sort_order": 80
   }
 ]

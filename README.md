@@ -1,6 +1,6 @@
 # python-price-monitor
 
-Watches searches on second-hand platforms (OLX, Vinted and Facebook Marketplace) and emails
+Watches searches on second-hand platforms (OLX, Publi24, eBay, Vinted and Facebook Marketplace) and emails
 one digest when a search finds **new listings** or a listing's **price drops**,
 with **possible scams flagged** and the reasons spelled out.
 
@@ -107,6 +107,22 @@ the item was uploaded, which tightens the age check.
 | `olx` | An OLX.ro results page with your filters set | Uses the JSON endpoint the site loads results from. The category is detected from the page once; set `{"category_id": N}` in `options` to fix it |
 | `vinted` | A Vinted catalog page (`https://www.vinted.ro/catalog?...`) | Reads the results embedded in the page, and the item page for new matches (see Possible scams). Its "newest first" isn't strict, so ages are estimated from item ids, and the item page's upload date wins when it's older. Prices include the buyer protection fee (`{"price": "item"}` in `options` for the seller's price). vinted.ro also shows items from Poland, Greece and more, so add keywords in those languages where needed |
 
+`publi24`: a Publi24 search (`https://www.publi24.ro/anunturi/?q=playstation+5`). It reads the
+results page: one page (20 listings) with price, place, date and photo count, and each ad's
+description from the page's structured data, for the scam phrases.
+
+`ebay`: an eBay search (`https://www.ebay.de/sch/i.html?_nkw=xbox+series+x+konsole&_udlo=200&_udhi=650`).
+eBay blocks its search pages from servers, so this uses its official **Browse API**: create a free
+Production keyset at [developer.ebay.com](https://developer.ebay.com) and set `EBAY_CLIENT_ID`
+(App ID) and `EBAY_CLIENT_SECRET` (Cert ID). The link's site picks the marketplace (ebay.de: EUR),
+`_nkw` the words, `_udlo`/`_udhi` a price range on the item, `_sacat` a category. Buy-it-now and
+best-offer only (`{"auctions": true}` in `options` adds auctions). A listing's **price is the total
+delivered** to `EBAY_SHIP_TO` (default `RO`): price + the cheapest shipping there, plus, for items
+shipped from outside the EU, customs duty (`{"duty_pct": N}` in `options`, 0 for consoles), import
+VAT on all of that (`IMPORT_VAT_PCT`, 21) and a courier's fee (`IMPORT_FEE_RON`, 0). The breakdown
+("320 € + 45 € shipping + 77 € import VAT (21%)") is in `price_detail`, under the price in the email
+and the dashboard. Min/max compare that total in lei (`EUR_TO_RON`, `USD_TO_RON`, ...).
+
 `facebook`: a Marketplace search with your filters set
 (`https://www.facebook.com/marketplace/bucharest/search/?query=...&minPrice=...&daysSinceListed=30`).
 It reads the results embedded in the page: one page per run (about 20 listings), sold and pending
@@ -121,7 +137,7 @@ search's error says so in the dashboard.
 ### Server and laptop
 
 Each copy runs only the platforms in its `PLATFORMS`, so nothing runs twice. The server runs
-`olx,vinted` from cron (add `facebook` there only with `FACEBOOK_COOKIES` set); a laptop has
+`olx,publi24,ebay` from cron (Vinted is off; add `facebook` only with `FACEBOOK_COOKIES` set); a laptop has
 `PLATFORMS=none` and runs things only by hand, Facebook included:
 
 ```bash
@@ -175,7 +191,7 @@ Run `--once` every 5 minutes:
 ## Database contract
 
 The monitor owns the schema. It creates the tables on start and adds new columns
-itself (`settings.schema_version`, now 3). Other apps may read everything and
+itself (`settings.schema_version`, now 4). Other apps may read everything and
 write only the columns marked ✎. All times are UTC `DATETIME`s. JSON columns hold
 text.
 
@@ -202,7 +218,8 @@ Its columns: `search_id`, `platform`, `external_id`, `title`, `url`, `image_url`
 `price`, `currency`, `location`, `posted_at` (given or estimated),
 `first_seen`, `last_seen`, and the scam flags: `risk_level` (`low`/`medium`/`high`
 or `NULL`), `risk_score`, `risk_reasons` (JSON list of sentences) and
-`risk_signals` (the derived facts they came from).
+`risk_signals` (the derived facts they came from), and `price_detail` (how `price` adds up, for
+eBay's totals).
 
 **`price_history`**: `listing_id`, `price`, `currency`, `seen_at`. One row when a
 listing is first seen, and one for every change.
