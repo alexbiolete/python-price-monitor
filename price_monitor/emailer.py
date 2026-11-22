@@ -3,6 +3,7 @@
 same palette, wordmark, card, kicker/title/intro, pill buttons and footer."""
 
 import html
+import socket
 import logging
 import os
 import smtplib
@@ -117,6 +118,9 @@ def render_digest(reports, dashboard_url=None):
     # A small label above the heading ("PRICE MONITOR"); empty: none. And an optional start for the
     # subject ("Deals: 3 new…")
     kicker = setting("EMAIL_KICKER", "Price monitor")
+    # Which copy sent it (ENVIRONMENT, e.g. Production on the server, Local on a laptop), next to
+    # the label; unset: the machine's name
+    environment = setting("ENVIRONMENT", socket.gethostname().split(".")[0])
     prefix = setting("EMAIL_SUBJECT_PREFIX", "")
     footer = setting("EMAIL_FOOTER", "A notification from your price monitor.")
     subject = f"{prefix}: {summary(n_new, n_drops)}" if prefix else title
@@ -151,7 +155,7 @@ def render_digest(reports, dashboard_url=None):
                   f'text-decoration:none">Open in dashboard</a></div>')
         text += ["", f"Open in dashboard: {dashboard_url}"]
     note = "You get this when a search finds a new listing, or a price drops by the threshold set for the monitor."
-    text += ["", note, "", f"{footer} ({wordmark()}{f' · {kicker}' if kicker else ''})"]
+    text += ["", note, "", f"{footer} ({' · '.join(x for x in (wordmark(), kicker, environment) if x)})"]
 
     page = f"""<!doctype html>
 <html lang="en">
@@ -169,7 +173,7 @@ def render_digest(reports, dashboard_url=None):
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px">
       <tr><td align="center" style="padding:4px 0 18px;border-bottom:1px solid {LINE};color:{INK};font-size:28px;line-height:1.2;font-weight:800;letter-spacing:-0.02em">{esc(wordmark())}</td></tr>
       <tr><td style="padding:16px 0 0">
-        {f'<div style="margin:0 0 6px;color:{ACCENT};font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase">{esc(kicker)}</div>' if kicker else ''}
+        <div style="margin:0 0 6px;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase">{f'<span style="color:{ACCENT}">{esc(kicker)}</span>' if kicker else ''}{' · ' if kicker and environment else ''}{f'<span style="color:{MUTED}">{esc(environment)}</span>' if environment else ''}</div>
         <h1 style="margin:0;color:{INK};font-size:20px;line-height:1.3;font-weight:700">{esc(title)}</h1>
         <p style="margin:4px 0 0;color:{MUTED};font-size:14px;line-height:1.5">{esc(intro)}</p>
         {"".join(body)}
