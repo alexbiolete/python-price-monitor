@@ -121,7 +121,8 @@ search's error says so in the dashboard.
 ### Server and laptop
 
 Each copy runs only the platforms in its `PLATFORMS`, so nothing runs twice. The server runs
-`olx,vinted,facebook` from cron; a laptop has `PLATFORMS=none` and runs things only by hand:
+`olx,vinted` from cron (add `facebook` there only with `FACEBOOK_COOKIES` set); a laptop has
+`PLATFORMS=none` and runs things only by hand, Facebook included:
 
 ```bash
 .venv/bin/python -m price_monitor --once --platforms facebook             # Facebook, logged out, from home
