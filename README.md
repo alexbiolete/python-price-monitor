@@ -53,7 +53,7 @@ With no SMTP settings, the email is printed instead of sent.
 .venv/bin/python -m price_monitor --once           # one check, then exit (what cron runs)
 .venv/bin/python -m price_monitor --status         # the searches and their last run
 .venv/bin/python -m price_monitor --test-email     # email the latest listings, to check delivery
-.venv/bin/python -m price_monitor --resend-all     # clear the stored listings and email everything that matches now
+.venv/bin/python -m price_monitor --resend-all     # clear the stored listings (pinned ones stay) and email everything that matches now
 ```
 
 Add `--platforms facebook` to any of these to limit it to some platforms, or
@@ -191,7 +191,7 @@ Run `--once` every 5 minutes:
 ## Database contract
 
 The monitor owns the schema. It creates the tables on start and adds new columns
-itself (`settings.schema_version`, now 4). Other apps may read everything and
+itself (`settings.schema_version`, now 5). Other apps may read everything and
 write only the columns marked ✎. All times are UTC `DATETIME`s. JSON columns hold
 text.
 
@@ -222,8 +222,9 @@ Its columns: `search_id`, `platform`, `external_id`, `title`, `url`, `image_url`
 `price`, `currency`, `location`, `posted_at` (given or estimated),
 `first_seen`, `last_seen`, and the scam flags: `risk_level` (`low`/`medium`/`high`
 or `NULL`), `risk_score`, `risk_reasons` (JSON list of sentences) and
-`risk_signals` (the derived facts they came from), and `price_detail` (how `price` adds up, for
-eBay's totals).
+`risk_signals` (the derived facts they came from), `price_detail` (how `price` adds up, for
+eBay's totals), and `pin_order` ✎: pinned in the dashboard, in this order (lower first; `NULL`: not
+pinned). The monitor never deletes a pinned listing, and `--resend-all` keeps them.
 
 **`price_history`**: `listing_id`, `price`, `currency`, `seen_at`. One row when a
 listing is first seen, and one for every change.

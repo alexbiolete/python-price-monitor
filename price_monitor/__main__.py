@@ -72,16 +72,18 @@ def import_searches(db, path):
 
 def resend_all(db, platforms=None, search_ids=None):
     """Forget what was stored and send it all again, for the searches this copy runs: their
-    listings (and price history) are deleted, they keep a baseline date so the run reports
-    everything as new, and that run happens now."""
+    listings (and price history) are deleted, except pinned ones; they keep a baseline date so
+    the run reports everything as new, and that run happens now."""
     allowed = allowed_platforms(platforms)
     ids = [s["id"] for s in db.all("SELECT id, platform FROM searches WHERE enabled = 1")
            if (allowed is None or s["platform"].lower() in allowed) and (not search_ids or s["id"] in search_ids)]
     if not ids:
         raise SystemExit("No enabled searches to resend here")
     marks = ", ".join("?" for _ in ids)
-    n = db.one(f"SELECT COUNT(*) AS n FROM listings WHERE search_id IN ({marks})", ids)["n"]
-    db.execute(f"DELETE FROM listings WHERE search_id IN ({marks})", ids)  # history goes with them
+    # Pinned listings stay (the dashboard's own picks), so they aren't in the email again
+    unpinned = f"search_id IN ({marks}) AND pin_order IS NULL"
+    n = db.one(f"SELECT COUNT(*) AS n FROM listings WHERE {unpinned}", ids)["n"]
+    db.execute(f"DELETE FROM listings WHERE {unpinned}", ids)  # history goes with them
     db.execute(f"UPDATE searches SET baseline_at = COALESCE(baseline_at, ?) WHERE id IN ({marks})",
                [to_db_time(utcnow())] + ids)
     db.commit()

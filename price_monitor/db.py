@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 # Columns added after the first version: (table, column, MySQL type, SQLite type).
 # Added on start when missing, so an existing database upgrades itself.
@@ -28,6 +28,8 @@ ADDED_COLUMNS = [
     ("searches", "sort_order", "INT NOT NULL DEFAULT 100", "INTEGER NOT NULL DEFAULT 100"),
     # v4: how a listing's price adds up (eBay: price + shipping + customs)
     ("listings", "price_detail", "VARCHAR(300) NULL", "TEXT"),
+    # v5: listings pinned in the dashboard, in their order (lower first; NULL: not pinned)
+    ("listings", "pin_order", "INT NULL", "INTEGER"),
 ]
 
 MYSQL_SCHEMA = [
