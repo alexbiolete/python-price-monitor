@@ -24,10 +24,11 @@ so the search's exclude keywords may need words in those languages.
 
 import json
 import re
+import time
 from datetime import datetime, timedelta
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from .base import Listing, Provider, ProviderError
+from .base import Check, Listing, Provider, ProviderError
 from ..risk import contact_in_text
 
 DEFAULT_IDS_PER_DAY = 15_000_000   # measured 2026-11: 2 days ≈ 33M ids, 5 weeks ≈ 534M
@@ -118,7 +119,6 @@ class VintedProvider(Provider):
     def enrich(self, listing):
         """The item's page: its description, the seller's reviews, and when it was uploaded
         ("acum 5 săptămâni"); the older of that and the id estimate is kept."""
-        import time
         time.sleep(self.item_delay)
         resp = self.session.get(listing.url, timeout=30)
         if resp.status_code in (403, 429):
@@ -148,13 +148,34 @@ class VintedProvider(Provider):
             if listing.posted_at is None or from_page < listing.posted_at:
                 listing.posted_at = from_page
 
+    def check(self, url):
+        """Sold ("is_closed") or hidden on its page. The page's price leaves out the buyer fee the
+        search results include, so the stored price stays."""
+        time.sleep(self.item_delay)
+        resp = self.fetch_ad(url)
+        if resp is None:
+            return Check(gone=True)
+        # Next to this item's id: the page also lists other items, with their own flags
+        item_id = re.search(r"/items/(\d+)", url)
+        if item_id is None:
+            return None
+        closed = re.search(r'\\*"is_closed\\*"\s*:\s*(true|false)\s*,\s*\\*"item_id\\*"\s*:\s*\\*"?'
+                           + item_id.group(1), resp.text)
+        if closed is None:
+            return None
+        return Check(gone=closed.group(1) == "true")
+
+    def same_ad(self, url, final_url):
+        """/items/123-old-title redirects to /items/123-new-title when the title changes"""
+        ids = [re.search(r"/items/(\d+)", u) for u in (url, final_url)]
+        return all(ids) and ids[0].group(1) == ids[1].group(1)
+
     def seller(self, listing, base):
         """The seller's public profile (a small JSON): where they are, for the listing's location
         ("Toruń, Polonia", or just the country), and their reviews, for the scam signals.
         Nothing about who they are is kept."""
         if not listing.seller_id:
             return
-        import time
         time.sleep(1)
         resp = self.session.get(f"{base}/api/v2/users/{listing.seller_id}",
                                 headers={"Accept": "application/json"}, timeout=30)

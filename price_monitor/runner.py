@@ -176,7 +176,7 @@ def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct,
                     drops.append({**item, "old_price": row["price"], "drop_pct": drop_pct})
         db.execute(
             "UPDATE listings SET title = ?, url = ?, image_url = ?, price = ?, currency = ?,"
-            " location = COALESCE(?, location), posted_at = COALESCE(?, posted_at), last_seen = ?,"
+            " location = COALESCE(?, location), posted_at = COALESCE(?, posted_at), last_seen = ?, inactive_at = NULL,"
             " risk_level = ?, risk_score = ?,"
             " risk_reasons = ?, risk_signals = ?, price_detail = ? WHERE id = ?",
             (l.title[:500], l.url, l.image_url, l.price, l.currency, (l.location or None) and l.location[:200],
@@ -187,6 +187,48 @@ def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct,
     if is_baseline:
         db.execute("UPDATE searches SET baseline_at = ? WHERE id = ?", (stamp, search["id"]))
     return new, drops, stats, is_baseline
+
+
+RECHECK_EVERY = timedelta(hours=12)  # an ad a search stopped showing is re-checked at most this often
+
+
+def recheck(db, search, provider, now):
+    """Stored ads this run didn't see (they fell off the results, or no longer match): read their
+    own pages, at most provider.max_check, the longest unchecked first. A sold or removed ad gets
+    inactive_at; one still up gets its price updated where the page shows it. Returns
+    (checked, gone, repriced)."""
+    stamp = to_db_time(now)
+    rows = db.all(
+        "SELECT id, url, price, currency FROM listings WHERE search_id = ? AND inactive_at IS NULL"
+        " AND last_seen < ? AND (checked_at IS NULL OR checked_at < ?)"
+        " ORDER BY checked_at IS NOT NULL, checked_at, last_seen LIMIT %d" % provider.max_check,
+        (search["id"], stamp, to_db_time(now - RECHECK_EVERY)))
+    checked = gone = repriced = 0
+    for i, row in enumerate(rows):
+        if i:
+            time.sleep(provider.check_delay)
+        try:
+            result = provider.check(row["url"])
+        except ProviderError as e:  # refused (rate limit): the rest wait for a later run
+            log.warning("[%s] %s: stopped re-checking ads: %s", provider.label, search["name"], e)
+            break
+        except Exception as e:  # one bad page doesn't stop the others
+            log.warning("[%s] %s: couldn't check %s: %s", provider.label, search["name"], row["url"], e)
+            continue
+        checked += 1
+        db.execute("UPDATE listings SET checked_at = ? WHERE id = ?", (stamp, row["id"]))
+        if result is None:
+            continue
+        if result.gone:
+            gone += 1
+            db.execute("UPDATE listings SET inactive_at = ? WHERE id = ?", (stamp, row["id"]))
+        elif result.price and result.currency and (result.price != row["price"] or result.currency != row["currency"]):
+            repriced += 1
+            db.execute("UPDATE listings SET price = ?, currency = ? WHERE id = ?",
+                       (result.price, result.currency, row["id"]))
+            db.execute("INSERT INTO price_history (listing_id, price, currency, seen_at) VALUES (?, ?, ?, ?)",
+                       (row["id"], result.price, result.currency, stamp))
+    return checked, gone, repriced
 
 
 def tick(db, platforms=None, search_ids=None):
@@ -274,6 +316,11 @@ def _tick(db, platforms, search_ids):
                      max_age or "∞", stats["no_price"], stats["pages"],
                      " (baseline saved, no email)" if baseline
                      else f"; {len(new)} new, {len(drops)} price drops, {flagged} flagged")
+            if listings:  # a failed or empty run says nothing about the stored ads
+                checked, gone, repriced = recheck(db, s, provider, now)
+                if checked:
+                    log.info("[%s] %s: re-checked %d ads it no longer shows: %d gone, %d with a new price",
+                             label, s["name"], checked, gone, repriced)
             if new or drops:
                 reports.append({"search": {**s, "platform_label": label}, "new": new, "drops": drops})
         except ProviderError as e:

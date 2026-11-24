@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 # Columns added after the first version: (table, column, MySQL type, SQLite type).
 # Added on start when missing, so an existing database upgrades itself.
@@ -30,6 +30,10 @@ ADDED_COLUMNS = [
     ("listings", "price_detail", "VARCHAR(300) NULL", "TEXT"),
     # v5: listings pinned in the dashboard, in their order (lower first; NULL: not pinned)
     ("listings", "pin_order", "INT NULL", "INTEGER"),
+    # v6: ads re-checked on their own page when a search stops showing them; inactive_at: when the
+    # ad was found sold or removed (NULL: active), checked_at: the last such check
+    ("listings", "inactive_at", "DATETIME NULL", "TEXT"),
+    ("listings", "checked_at", "DATETIME NULL", "TEXT"),
 ]
 
 MYSQL_SCHEMA = [

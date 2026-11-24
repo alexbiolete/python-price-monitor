@@ -225,6 +225,11 @@ or `NULL`), `risk_score`, `risk_reasons` (JSON list of sentences) and
 `risk_signals` (the derived facts they came from), `price_detail` (how `price` adds up, for
 eBay's totals), and `pin_order` ✎: pinned in the dashboard, in this order (lower first; `NULL`: not
 pinned). The monitor never deletes a pinned listing, and `--resend-all` keeps them.
+`inactive_at`: when the ad was found sold or removed (`NULL`: active), and `checked_at`: when it
+was last checked. After each run that returns results, the monitor opens the pages of up to 10 stored
+ads the run didn't show (they fell off the results or no longer match), each at most every 12 hours:
+a missing ad (404, or a redirect away from it) or one its page says is closed gets `inactive_at`; OLX
+pages also update the price. An inactive ad that shows up in the results again is active again.
 
 **`price_history`**: `listing_id`, `price`, `currency`, `seen_at`. One row when a
 listing is first seen, and one for every change.

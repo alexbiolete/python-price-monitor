@@ -11,6 +11,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
+from urllib.parse import urlsplit
 
 import requests
 
@@ -57,6 +58,15 @@ def parse_iso_utc(value):
     if dt.tzinfo is not None:
         dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
     return dt.replace(microsecond=0)
+
+
+@dataclass
+class Check:
+    """What an ad's own page says: gone (sold or removed), and its price when the page shows one
+    comparable to the search results' (None: leave the stored price)."""
+    gone: bool
+    price: Optional[float] = None
+    currency: Optional[str] = None
 
 
 @dataclass
@@ -108,3 +118,31 @@ class Provider:
 
     def enrich(self, listing: Listing) -> None:
         """Hook: fill listing.signals (and posted_at) from the item's page."""
+
+    # Stored ads a search no longer shows are re-checked on their own page (the runner picks them),
+    # at most max_check per search per run, check_delay seconds apart
+    max_check = 10
+    check_delay = 2
+
+    def check(self, url: str) -> Optional[Check]:
+        """Is the ad still up? Default: a 404 or 410 means gone; anything else can't tell (None).
+        Providers that can read the page override this."""
+        resp = self.fetch_ad(url)
+        return Check(gone=True) if resp is None else None
+
+    def fetch_ad(self, url):
+        """The ad's page, or None when it's gone (404/410, or redirected away from the ad)."""
+        resp = self.session.get(url, timeout=30)
+        if resp.status_code in (403, 429):
+            raise ProviderError(f"{self.label} refused an ad page (HTTP {resp.status_code}); possibly rate-limited")
+        if resp.status_code in (404, 410):
+            return None
+        resp.raise_for_status()
+        if resp.history and not self.same_ad(url, resp.url):
+            return None  # sent to a category or home page: the ad is gone
+        return resp
+
+    def same_ad(self, url, final_url):
+        """After a redirect: still the ad's page? Default: the same path. Override where an ad's
+        address changes with its title."""
+        return urlsplit(final_url).path == urlsplit(url).path

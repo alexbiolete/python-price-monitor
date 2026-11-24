@@ -10,12 +10,14 @@ from collections import Counter
 from datetime import datetime
 from urllib.parse import parse_qsl, urlsplit
 
-from .base import Listing, Provider, ProviderError, parse_iso_utc
+from .base import Check, Listing, Provider, ProviderError, parse_iso_utc
 
 API_URL = "https://www.olx.ro/api/v1/offers/"
 PAGE_LIMIT = 40
 MAX_PAGES = 3
 
+_IS_ACTIVE = re.compile(r'\\*"isActive\\*"\s*:\s*(true|false)')
+_REGULAR_PRICE = re.compile(r'\\*"regularPrice\\*"\s*:\s*\{\\*"value\\*"\s*:\s*([\d.]+)\s*,\s*\\*"currencyCode\\*"\s*:\s*\\*"([A-Z]+)')
 _SEARCH_KEY = re.compile(r"^search\[([^\]]+)\](.*)$")
 _CATEGORY_PATTERNS = [
     re.compile(r'\\*"category_id\\*"\s*:\s*\\*"?(\d+)'),
@@ -95,6 +97,27 @@ class OlxProvider(Provider):
             if len(data) < PAGE_LIMIT:
                 break
         return [self.parse(o) for o in raw]
+
+    def same_ad(self, url, final_url):
+        """Ad addresses end in "-ID<code>.html"; the words before it follow the title"""
+        ids = [re.search(r"-ID(\w+)\.html", u) for u in (url, final_url)]
+        return all(ids) and ids[0].group(1) == ids[1].group(1)
+
+    def check(self, url):
+        """The ad's page says whether it's active ("isActive") and its price ("regularPrice")."""
+        resp = self.fetch_ad(url)
+        if resp is None:
+            return Check(gone=True)
+        active = _IS_ACTIVE.search(resp.text)
+        if active is None:
+            return None  # layout changed: can't tell
+        if active.group(1) == "false":
+            return Check(gone=True)
+        price = _REGULAR_PRICE.search(resp.text)
+        if price is None:
+            return Check(gone=False)
+        currency = price.group(2)
+        return Check(gone=False, price=float(price.group(1)), currency="RON" if currency == "LEI" else currency)
 
     @staticmethod
     def parse(offer):
