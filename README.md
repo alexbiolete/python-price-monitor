@@ -262,7 +262,11 @@ pages also update the price. An inactive ad that shows up in the results again i
 listing is first seen (`seen_at` = its `first_seen`), and one for every change.
 
 **`status_history`**: `listing_id`, `status`, `seen_at`. A row when the ad was found sold or
-removed (`inactive`), and when it showed up in the results again after that (`active`).
+removed (`inactive`), when it showed up in the results again after that (`active`), and when its
+page showed it uploaded again (`reposted`, at that time: Vinted, whose item pages say when an ad
+was last uploaded; the monitor re-reads stored Vinted ads' pages at most every 12 hours for it). A
+repost: shown as uploaded within the last week, at least a day and a quarter of its age after it
+was posted. Not a warning sign; `posted_at` stays the original.
 
 **`settings`**: a single row, `id = 1`.
 

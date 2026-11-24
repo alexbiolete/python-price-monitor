@@ -47,6 +47,21 @@ class Listing:
     price_detail: Optional[str] = None
 
 
+# A repost: the page shows an upload at most this many days ago, and the ad is older than that by at
+# least a day and a quarter of its age (the page's times are coarse: "acum 3 zile", "acum o lună")
+REPOST_SHOWN_WITHIN_DAYS = 7
+
+
+def is_repost(posted_at, uploaded, now):
+    """The page's upload is a repost of an older ad (see REPOST_SHOWN_WITHIN_DAYS)"""
+    if not posted_at or not uploaded:
+        return False
+    shown_age = (now - uploaded).total_seconds() / 86400
+    gap = (uploaded - posted_at).total_seconds() / 86400
+    age = (now - posted_at).total_seconds() / 86400
+    return shown_age <= REPOST_SHOWN_WITHIN_DAYS and gap >= max(1, age / 4)
+
+
 def parse_iso_utc(value):
     """An ISO time with an offset ("2026-11-22T12:56:39+02:00") as naive UTC, or None."""
     if not value:
@@ -67,6 +82,8 @@ class Check:
     gone: bool
     price: Optional[float] = None
     currency: Optional[str] = None
+    # When the page says the ad was (re)uploaded, where it says (Vinted), for reposts
+    uploaded_at: Optional[datetime] = None
 
 
 @dataclass
@@ -160,6 +177,9 @@ class Provider:
     # at most max_check per search per run, check_delay seconds apart
     max_check = 10
     check_delay = 2
+    # Also re-read the pages of ads the run did see (each at most every RECHECK_EVERY), for what only
+    # the page shows: Vinted's upload time, to notice reposts
+    recheck_seen = False
 
     def check(self, url: str) -> Optional[Check]:
         """Is the ad still up? Default: a 404 or 410 means gone; anything else can't tell (None).

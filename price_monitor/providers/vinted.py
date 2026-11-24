@@ -28,7 +28,7 @@ import time
 from datetime import datetime, timedelta
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from .base import Check, Listing, Provider, ProviderError
+from .base import Check, Listing, Provider, ProviderError, is_repost
 from ..risk import contact_in_text
 
 DEFAULT_IDS_PER_DAY = 15_000_000   # measured 2026-11: 2 days ≈ 33M ids, 5 weeks ≈ 534M
@@ -79,6 +79,13 @@ def relative_days(text):
     return None
 
 
+def uploaded_at(payload, now):
+    """When the item page says it was uploaded ("Încărcat: acum 2 zile"), or None"""
+    m = re.search(r'"upload_date","data":\{"title":"[^"]*","value":"([^"]+)"', payload or "")
+    days = relative_days(m.group(1)) if m else None
+    return (now - timedelta(days=days)).replace(microsecond=0) if days is not None else None
+
+
 def items_from_page(html):
     payload = page_payload(html)
     decoder = json.JSONDecoder()
@@ -96,6 +103,7 @@ def items_from_page(html):
 class VintedProvider(Provider):
     name = "vinted"
     label = "Vinted"
+    recheck_seen = True  # to notice reposts: only the item page says when it was (re)uploaded
     seller_info = ("reviews",)
     search_delay = 5
     needs_enrich = True
@@ -145,7 +153,12 @@ class VintedProvider(Provider):
         uploaded = next((a.get("data", {}).get("value") for a in attrs if a.get("code") == "upload_date"), None)
         days = relative_days(uploaded)
         if days is not None:
-            from_page = datetime.utcnow().replace(microsecond=0) - timedelta(days=days)
+            now = datetime.utcnow().replace(microsecond=0)
+            from_page = now - timedelta(days=days)
+            # Shown as uploaded much later than its id says it was posted: reposted (an update, not a
+            # warning sign; the posted date stays the id's)
+            if is_repost(listing.posted_at, from_page, now):
+                signals["uploaded_at"] = from_page.isoformat()
             if listing.posted_at is None or from_page < listing.posted_at:
                 listing.posted_at = from_page
 
@@ -164,7 +177,8 @@ class VintedProvider(Provider):
                            + item_id.group(1), resp.text)
         if closed is None:
             return None
-        return Check(gone=closed.group(1) == "true")
+        return Check(gone=closed.group(1) == "true",
+                     uploaded_at=uploaded_at(page_payload(resp.text), datetime.utcnow().replace(microsecond=0)))
 
     def same_ad(self, url, final_url):
         """/items/123-old-title redirects to /items/123-new-title when the title changes"""

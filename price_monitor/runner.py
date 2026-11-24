@@ -18,13 +18,13 @@ import json
 import logging
 import os
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from .db import from_db_time, json_list, json_object, to_db_time, utcnow
 from . import clean, rates, risk
 from .emailer import by_product, fmt_price, render_digest, send_email
 from .providers import PROVIDERS, get_provider_class
-from .providers.base import ProviderError, SearchSpec
+from .providers.base import ProviderError, SearchSpec, is_repost
 
 log = logging.getLogger("price_monitor")
 
@@ -185,6 +185,9 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
                  stamp, stamp) + risk_values + ((l.price_detail or None) and l.price_detail[:300], price_ron))
             db.execute("INSERT INTO price_history (listing_id, price, currency, seen_at) VALUES (?, ?, ?, ?)",
                        (cur.lastrowid, l.price, l.currency, stamp))
+            if signals.get("uploaded_at"):  # its page shows it reposted since it was posted
+                db.execute("INSERT INTO status_history (listing_id, status, seen_at) VALUES (?, 'reposted', ?)",
+                           (cur.lastrowid, to_db_time(datetime.fromisoformat(signals["uploaded_at"]))))
             if in_range and not is_baseline and search["notify_new"]:
                 new.append(item)
             continue
@@ -233,17 +236,33 @@ def emailed(item, max_risk):
 RECHECK_EVERY = timedelta(hours=12)  # an ad a search stopped showing is re-checked at most this often
 
 
+def reposted(db, row, uploaded, now):
+    """The page shows the ad uploaded at `uploaded`: a "reposted" update if that's a repost of the
+    ad (is_repost) and a new one (a day or more after the last repost it showed)"""
+    posted = from_db_time(row["posted_at"])
+    signals = json_object(row["risk_signals"]) if row["risk_signals"] else {}
+    last = datetime.fromisoformat(signals["uploaded_at"]) if signals.get("uploaded_at") else None
+    if not is_repost(posted, uploaded, now) or (last and uploaded - last < timedelta(days=1)):
+        return
+    signals["uploaded_at"] = uploaded.isoformat()
+    db.execute("UPDATE listings SET risk_signals = ? WHERE id = ?", (json.dumps(signals, ensure_ascii=False), row["id"]))
+    db.execute("INSERT INTO status_history (listing_id, status, seen_at) VALUES (?, 'reposted', ?)",
+               (row["id"], to_db_time(uploaded)))
+
+
 def recheck(db, search, provider, now):
-    """Stored ads this run didn't see (they fell off the results, or no longer match): read their
-    own pages, at most provider.max_check, the longest unchecked first. A sold or removed ad gets
-    inactive_at; one still up gets its price updated where the page shows it. Returns
-    (checked, gone, repriced)."""
+    """Stored ads this run didn't see (they fell off the results, or no longer match), and for
+    providers with recheck_seen the ones it did see too: read their own pages, at most
+    provider.max_check, the longest unchecked first. A sold or removed ad gets inactive_at; one still
+    up gets its price updated where the page shows it, and a "reposted" update when the page shows
+    it uploaded again (Vinted). Returns (checked, gone, repriced)."""
     stamp = to_db_time(now)
+    unseen = "" if provider.recheck_seen else " AND last_seen < ?"
     rows = db.all(
-        "SELECT id, url, price, currency FROM listings WHERE search_id = ? AND inactive_at IS NULL"
-        " AND last_seen < ? AND (checked_at IS NULL OR checked_at < ?)"
+        "SELECT id, url, price, currency, posted_at, risk_signals FROM listings WHERE search_id = ? AND inactive_at IS NULL"
+        + unseen + " AND (checked_at IS NULL OR checked_at < ?)"
         " ORDER BY checked_at IS NOT NULL, checked_at, last_seen LIMIT %d" % provider.max_check,
-        (search["id"], stamp, to_db_time(now - RECHECK_EVERY)))
+        (search["id"],) + (() if provider.recheck_seen else (stamp,)) + (to_db_time(now - RECHECK_EVERY),))
     checked = gone = repriced = 0
     for i, row in enumerate(rows):
         if i:
@@ -260,6 +279,8 @@ def recheck(db, search, provider, now):
         db.execute("UPDATE listings SET checked_at = ? WHERE id = ?", (stamp, row["id"]))
         if result is None:
             continue
+        if not result.gone and result.uploaded_at:
+            reposted(db, row, result.uploaded_at, now)
         if result.gone:
             gone += 1
             db.execute("UPDATE listings SET inactive_at = ? WHERE id = ?", (stamp, row["id"]))
