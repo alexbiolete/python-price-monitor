@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 # Columns added after the first version: (table, column, MySQL type, SQLite type).
 # Added on start when missing, so an existing database upgrades itself.
@@ -45,6 +45,9 @@ ADDED_COLUMNS = [
     ("settings", "exchange_rates", "TEXT NULL", "TEXT"),
     ("settings", "exchange_rates_at", "DATETIME NULL", "TEXT"),
     ("settings", "prices_in_ron", "TINYINT(1) NOT NULL DEFAULT 1", "INTEGER NOT NULL DEFAULT 1"),
+    # v11: listings ignored in the dashboard (left out of price estimates, listed last); the monitor
+    # never changes it, and keeps them like pinned ones
+    ("listings", "ignored_at", "DATETIME NULL", "TEXT"),
 ]
 
 MYSQL_SCHEMA = [

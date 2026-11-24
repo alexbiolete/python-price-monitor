@@ -80,8 +80,8 @@ def resend_all(db, platforms=None, search_ids=None):
     if not ids:
         raise SystemExit("No enabled searches to resend here")
     marks = ", ".join("?" for _ in ids)
-    # Pinned listings stay (the dashboard's own picks), so they aren't in the email again
-    unpinned = f"search_id IN ({marks}) AND pin_order IS NULL"
+    # Pinned and ignored listings stay (the dashboard's own marks), so they aren't in the email again
+    unpinned = f"search_id IN ({marks}) AND pin_order IS NULL AND ignored_at IS NULL"
     n = db.one(f"SELECT COUNT(*) AS n FROM listings WHERE {unpinned}", ids)["n"]
     db.execute(f"DELETE FROM listings WHERE {unpinned}", ids)  # history goes with them
     db.execute(f"UPDATE searches SET baseline_at = COALESCE(baseline_at, ?) WHERE id IN ({marks})",
