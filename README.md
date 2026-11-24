@@ -228,7 +228,9 @@ and reports it as new, if its search still matches the ad.
 
 **`listings`**: what each search found and still matches its keywords, **also outside its price
 range**: show a search's listings with `price_ron` between its `min_price` and `max_price`, to match
-the email. Unique on `(search_id, external_id)`.
+the email. Unique on `(search_id, external_id)`. Its text is stored plain (HTML entities decoded,
+tags, control and invisible characters removed, [`clean.py`](price_monitor/clean.py)) and its
+links are `http(s)` only (an ad without one is skipped); still escape it when showing it.
 Its columns: `search_id`, `platform`, `external_id`, `title`, `url`, `image_url`,
 `price`, `currency`, `price_ron` (the price in lei the range compares; eBay's total), `location`, `posted_at` (given or estimated),
 `first_seen`, `last_seen`, and the scam flags: `risk_level` (`low`/`medium`/`high`

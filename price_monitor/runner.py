@@ -21,7 +21,7 @@ import time
 from datetime import timedelta
 
 from .db import from_db_time, json_list, json_object, to_db_time, utcnow
-from . import rates, risk
+from . import clean, rates, risk
 from .emailer import fmt_price, render_digest, send_email
 from .providers import PROVIDERS, get_provider_class
 from .providers.base import ProviderError, SearchSpec
@@ -105,6 +105,9 @@ def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct,
             continue
         if l.external_id in seen:
             continue  # the same ad on two pages (promoted ads repeat)
+        if not clean.listing(l):
+            stats["filtered"] += 1  # no web link to it
+            continue
         seen.add(l.external_id)
         if l.external_id in skipped_old or (oldest and l.posted_at and l.posted_at < oldest):
             stats["too_old"] += 1  # older than the age limit (ads without a date are kept)
@@ -139,6 +142,7 @@ def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct,
                 budget -= 1
                 stats["pages"] += 1
                 provider.enrich(l)
+                clean.listing(l)  # the item page may have added to it (e.g. the location)
                 if oldest and l.posted_at and l.posted_at < oldest:
                     stats["too_old"] += 1
                     skipped_old.add(l.external_id)
