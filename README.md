@@ -68,8 +68,9 @@ After that, each run reports listings it hasn't seen and drops of at least
 
 - **Price:** `min_price` / `max_price` in RON. Other currencies are converted at the National Bank of
   Romania's daily rates (BNR, `curs.bnr.ro`): fetched at most every 6 hours and kept in `settings`, so
-  a failed fetch keeps the last ones (none yet: an ad in another currency waits for them, unstored);
-  a new set also recalculates every stored listing's `price_ron`. No rates are built in or set by hand. Ads outside
+  a failed fetch keeps the last ones; a new set also recalculates every stored listing's `price_ron`.
+  No real rates are built in or set by hand: without a BNR rate (before the first fetch ever, or a
+  currency BNR doesn't list) a placeholder of 5 lei is used, logged, and corrected by the next fetch. Ads outside
   the range are still stored (for the price estimate, [docs/price-estimate.md](docs/price-estimate.md))
   but never emailed; the dashboard shows only the ones in the range. To see the whole market,
   leave the price out of the search's link (OLX's price filter, eBay's `_udlo`/`_udhi`) and set it

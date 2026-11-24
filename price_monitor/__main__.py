@@ -114,7 +114,7 @@ def test_email(db):
         cls = get_provider_class(s["platform"])
         label = cls.label if cls else s["platform"]
         rows = db.all("SELECT * FROM listings WHERE search_id = ? ORDER BY first_seen DESC LIMIT 5", (s["id"],))
-        items = [{**r, "platform_label": label, "price_ron": r["price_ron"] or to_ron(r["price"], r["currency"]) or r["price"]}
+        items = [{**r, "platform_label": label, "price_ron": r["price_ron"] or to_ron(r["price"], r["currency"])}
                  for r in rows]
         if items:
             drop = {**items[0], "old_price": items[0]["price"] * 1.1, "drop_pct": 100 / 11}

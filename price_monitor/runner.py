@@ -45,7 +45,7 @@ def env_number(key, default):
 
 
 def to_ron(price, currency):
-    """Lei, for the searches' min/max (rates.py: BNR's rates); None without a rate for the currency"""
+    """Lei, for the searches' min/max (rates.py: BNR's rates)"""
     return rates.to_ron(price, currency)
 
 
@@ -95,8 +95,7 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
     stamp = to_db_time(now)
     state = spec.state if spec is not None else {}
     skipped_old = set(state.get("skipped_old") or [])
-    stats = {"matching": 0, "filtered": 0, "out_of_range": 0, "no_price": 0, "no_rate": 0, "too_old": 0, "pages": 0,
-             "sellers": 0}
+    stats = {"matching": 0, "filtered": 0, "out_of_range": 0, "no_price": 0, "too_old": 0, "pages": 0, "sellers": 0}
     fmt = lambda amount: fmt_price(amount, "RON")  # noqa: E731
 
     # 1. The search's filters. The price range only decides what's reported: ads outside it are kept
@@ -115,9 +114,6 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
             stats["too_old"] += 1  # older than the age limit (ads without a date are kept)
             continue
         price_ron = to_ron(l.price, l.currency)
-        if price_ron is None:
-            stats["no_rate"] += 1  # no exchange rate yet: not stored, so it's new once there is one
-            continue
         title = l.title.lower()
         if (includes and not any(k in title for k in includes)) or any(k in title for k in excludes):
             stats["filtered"] += 1
@@ -213,9 +209,7 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
     # Stored before price_ron existed (v8) and not in this run's results: worked out from their price
     for r in db.all("SELECT id, price, currency FROM listings WHERE search_id = ? AND price_ron IS NULL",
                     (search["id"],)):
-        price_ron = to_ron(r["price"], r["currency"])
-        if price_ron is not None:
-            db.execute("UPDATE listings SET price_ron = ? WHERE id = ?", (price_ron, r["id"]))
+        db.execute("UPDATE listings SET price_ron = ? WHERE id = ?", (to_ron(r["price"], r["currency"]), r["id"]))
 
     if skipped_old:
         state["skipped_old"] = sorted(skipped_old)[-SKIP_MEMO:]
@@ -348,11 +342,10 @@ def _tick(db, platforms, search_ids):
             error = None if listings else "The platform returned no results; check the search URL and filters"
             flagged = sum(1 for x in new + drops if x["risk_level"])
             log.info("[%s] %s: %d results, %d matching, %d outside the price range (kept), %d filtered out,"
-                     " %d older than %s days, %d without price, %d without an exchange rate, %d item pages read,"
-                     " %d sellers looked up%s",
+                     " %d older than %s days, %d without price, %d item pages read, %d sellers looked up%s",
                      label, s["name"], len(listings), stats["matching"], stats["out_of_range"], stats["filtered"],
                      stats["too_old"],
-                     max_age or "∞", stats["no_price"], stats["no_rate"], stats["pages"], stats["sellers"],
+                     max_age or "∞", stats["no_price"], stats["pages"], stats["sellers"],
                      " (baseline saved, no email)" if baseline
                      else f"; {len(new)} new, {len(drops)} price drops, {flagged} flagged")
             if listings:  # a failed or empty run says nothing about the stored ads

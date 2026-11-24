@@ -2,9 +2,8 @@
 and eBay's handling fee.
 
 The National Bank of Romania's daily reference rates (BNR, curs.bnr.ro), fetched at most every
-REFRESH_EVERY and kept in settings (exchange_rates), so a failed fetch keeps the last ones. No rates
-are built in or configured: until the first fetch succeeds, a price in another currency has no
-value in lei (None).
+REFRESH_EVERY and kept in settings (exchange_rates), so a failed fetch keeps the last ones. No real
+rates are built in or configured; only PLACEHOLDER_RATE, as a very last resort.
 """
 
 import json
@@ -21,22 +20,35 @@ log = logging.getLogger("price_monitor")
 BNR_URL = "https://curs.bnr.ro/nbrfxrates.xml"
 REFRESH_EVERY = timedelta(hours=6)  # BNR publishes once a working day, around 13:00 Romanian time
 
+# NOT A REAL EXCHANGE RATE. A deliberately round, unrealistic placeholder (lei per unit of any
+# currency) used only when there's no BNR rate for it: before the very first fetch ever succeeded,
+# or for a currency BNR doesn't list. Prices worked out with it are wrong; the next successful fetch
+# recalculates every stored listing's price_ron with the real rates. Each use is logged.
+PLACEHOLDER_RATE = 5.0
+
 _RATE = re.compile(r'<Rate currency="([A-Z]{3})"(?:\s+multiplier="(\d+)")?\s*>([\d.]+)</Rate>')
 _DATE = re.compile(r'<Cube date="(\d{4}-\d{2}-\d{2})"')
 
 _live = {}  # the rates in use this run (from settings), by currency
+_warned = set()  # currencies the placeholder was used for this run, logged once each
 
 
 def rate_to_ron(currency):
-    """Lei per unit of this currency, or None if unknown (no rates fetched yet, or not one BNR lists)."""
+    """Lei per unit of this currency: BNR's rate, else PLACEHOLDER_RATE (not a real rate; logged)."""
     currency = (currency or "RON").upper()
-    return 1.0 if currency == "RON" else _live.get(currency)
+    if currency == "RON":
+        return 1.0
+    if currency in _live:
+        return _live[currency]
+    if currency not in _warned:
+        _warned.add(currency)
+        log.warning("No BNR exchange rate for %s; using the placeholder %s lei (not a real rate) until there is one",
+                    currency, PLACEHOLDER_RATE)
+    return PLACEHOLDER_RATE
 
 
 def to_ron(amount, currency):
-    """The amount in lei, or None when there's no rate for the currency."""
-    rate = rate_to_ron(currency)
-    return amount * rate if rate else None
+    return amount * rate_to_ron(currency)
 
 
 def parse_bnr(xml):
@@ -67,7 +79,7 @@ def refresh(db, now):
     except Exception as e:  # the last rates stay in use
         # Tried again on the next run; meanwhile the last ones stay in use
         log.warning("Couldn't fetch BNR's exchange rates (%s); %s", e,
-                    "using the last ones" if _live else "prices in other currencies wait until they're fetched")
+                    "using the last ones" if _live else "using the placeholder rate until they're fetched")
         return
     _live = rates
     db.execute("UPDATE settings SET exchange_rates = ?, exchange_rates_at = ? WHERE id = 1",
