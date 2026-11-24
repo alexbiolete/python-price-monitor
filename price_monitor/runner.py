@@ -243,11 +243,12 @@ def reposted(db, row, uploaded, now):
     signals = json_object(row["risk_signals"]) if row["risk_signals"] else {}
     last = datetime.fromisoformat(signals["uploaded_at"]) if signals.get("uploaded_at") else None
     if not is_repost(posted, uploaded, now) or (last and uploaded - last < timedelta(days=1)):
-        return
+        return False
     signals["uploaded_at"] = uploaded.isoformat()
     db.execute("UPDATE listings SET risk_signals = ? WHERE id = ?", (json.dumps(signals, ensure_ascii=False), row["id"]))
     db.execute("INSERT INTO status_history (listing_id, status, seen_at) VALUES (?, 'reposted', ?)",
                (row["id"], to_db_time(uploaded)))
+    return True
 
 
 def recheck(db, search, provider, now):
@@ -255,7 +256,7 @@ def recheck(db, search, provider, now):
     providers with recheck_seen the ones it did see too: read their own pages, at most
     provider.max_check, the longest unchecked first. A sold or removed ad gets inactive_at; one still
     up gets its price updated where the page shows it, and a "reposted" update when the page shows
-    it uploaded again (Vinted). Returns (checked, gone, repriced)."""
+    it uploaded again (Vinted). Returns (checked, gone, repriced, reposted)."""
     stamp = to_db_time(now)
     unseen = "" if provider.recheck_seen else " AND last_seen < ?"
     rows = db.all(
@@ -263,7 +264,7 @@ def recheck(db, search, provider, now):
         + unseen + " AND (checked_at IS NULL OR checked_at < ?)"
         " ORDER BY checked_at IS NOT NULL, checked_at, last_seen LIMIT %d" % provider.max_check,
         (search["id"],) + (() if provider.recheck_seen else (stamp,)) + (to_db_time(now - RECHECK_EVERY),))
-    checked = gone = repriced = 0
+    checked = gone = repriced = reposts = 0
     for i, row in enumerate(rows):
         if i:
             time.sleep(provider.check_delay)
@@ -279,8 +280,8 @@ def recheck(db, search, provider, now):
         db.execute("UPDATE listings SET checked_at = ? WHERE id = ?", (stamp, row["id"]))
         if result is None:
             continue
-        if not result.gone and result.uploaded_at:
-            reposted(db, row, result.uploaded_at, now)
+        if not result.gone and result.uploaded_at and reposted(db, row, result.uploaded_at, now):
+            reposts += 1
         if result.gone:
             gone += 1
             db.execute("UPDATE listings SET inactive_at = ? WHERE id = ?", (stamp, row["id"]))
@@ -292,7 +293,7 @@ def recheck(db, search, provider, now):
                        (result.price, result.currency, to_ron(result.price, result.currency), row["id"]))
             db.execute("INSERT INTO price_history (listing_id, price, currency, seen_at) VALUES (?, ?, ?, ?)",
                        (row["id"], result.price, result.currency, stamp))
-    return checked, gone, repriced
+    return checked, gone, repriced, reposts
 
 
 def tick(db, platforms=None, search_ids=None):
@@ -383,10 +384,10 @@ def _tick(db, platforms, search_ids):
                      " (baseline saved, no email)" if baseline
                      else f"; {len(new)} new, {len(drops)} price drops, {flagged} flagged")
             if listings:  # a failed or empty run says nothing about the stored ads
-                checked, gone, repriced = recheck(db, s, provider, now)
+                checked, gone, repriced, reposts = recheck(db, s, provider, now)
                 if checked:
-                    log.info("[%s] %s: re-checked %d ads it no longer shows: %d gone, %d with a new price",
-                             label, s["name"], checked, gone, repriced)
+                    log.info("[%s] %s: re-checked %d ads' pages: %d gone, %d with a new price, %d reposted",
+                             label, s["name"], checked, gone, repriced, reposts)
             # Only up to the risk level the settings email (the rest are stored and shown, not emailed)
             new, drops = [x for x in new if emailed(x, max_risk)], [x for x in drops if emailed(x, max_risk)]
             if new or drops:
