@@ -91,6 +91,8 @@ class Provider:
     def __init__(self):
         self.log = logging.getLogger(f"price_monitor.{self.name}")
         self._session = None
+        self._sellers = {}  # seller_signals() answers this run, by seller id
+        self._sellers_refused = False
 
     @property
     def session(self):
@@ -118,6 +120,38 @@ class Provider:
 
     def enrich(self, listing: Listing) -> None:
         """Hook: fill listing.signals (and posted_at) from the item's page."""
+
+    # Some platforms rate sellers through a separate service (OLX). The runner looks a seller up for
+    # listings it has no seller rating for yet, at most max_seller_lookups per search per run (in the
+    # price range first), and keeps the answer on the listing. A seller is looked up once per run.
+    rates_sellers = False
+    max_seller_lookups = 40
+    seller_lookup_delay = 0.3
+
+    def seller_signals(self, listing: Listing) -> Optional[dict]:
+        """The seller's rating as signals (seller_reviews, seller_rating 0-1, seller_negative_reviews),
+        or None when it can't be read. Cached per seller for the run; after a refusal (rate limit),
+        no more lookups this run."""
+        key = listing.seller_id
+        if not key or self._sellers_refused:
+            return None
+        if key not in self._sellers:
+            if self._sellers:
+                time.sleep(self.seller_lookup_delay)
+            try:
+                self._sellers[key] = self.fetch_seller_signals(listing)
+            except ProviderError as e:
+                self.log.warning("Stopped looking up sellers this run: %s", e)
+                self._sellers_refused = True
+                return None
+            except Exception as e:  # one seller doesn't stop the run
+                self.log.warning("Couldn't read a seller's rating: %s", e)
+                self._sellers[key] = None
+        return self._sellers[key]
+
+    def fetch_seller_signals(self, listing: Listing) -> Optional[dict]:
+        """Hook for rates_sellers: one lookup. Raise ProviderError when refused."""
+        return None
 
     # Stored ads a search no longer shows are re-checked on their own page (the runner picks them),
     # at most max_check per search per run, check_delay seconds apart

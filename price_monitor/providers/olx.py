@@ -13,6 +13,9 @@ from urllib.parse import parse_qsl, urlsplit
 from .base import Check, Listing, Provider, ProviderError, parse_iso_utc
 
 API_URL = "https://www.olx.ro/api/v1/offers/"
+# Sellers' ratings, as an ad's page shows them ("5.0 / 5, 18 ratinguri"): OLX's ratings service,
+# public, by the seller's uuid (which the offers above include)
+RATINGS_URL = "https://rating-cdn.css.olx.io/ratings/v1/public/olxro/user/{uuid}/score/details"
 PAGE_LIMIT = 40
 MAX_PAGES = 3
 
@@ -152,4 +155,30 @@ class OlxProvider(Provider):
             image_url=image,
             posted_at=parse_iso_utc(offer.get("created_time")),
             signals=signals,
+            seller_id=(offer.get("user") or {}).get("uuid") or None,
         )
+
+    rates_sellers = True
+
+    def fetch_seller_signals(self, listing):
+        resp = self.session.get(
+            RATINGS_URL.format(uuid=listing.seller_id), params={"includeDeletedRatings": "false"},
+            headers={"Accept": "application/json", "Accept-Language": "ro", "X-Platform-Type": "desktop",
+                     "Origin": "https://www.olx.ro", "Referer": listing.url}, timeout=20)
+        if resp.status_code in (401, 403, 429):
+            raise ProviderError(f"OLX refused a seller rating (HTTP {resp.status_code}); possibly rate-limited")
+        if resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+        if resp.status_code == 204 or not resp.content:
+            return {"seller_reviews": 0, "seller_negative_reviews": 0}  # no ratings yet
+        data = resp.json()
+        count = (data.get("ratings") or {}).get("totalCount")
+        if count is None:
+            return None
+        stars = data.get("details") or {}
+        signals = {"seller_reviews": int(count),
+                   "seller_negative_reviews": int(stars.get("stars_1") or 0) + int(stars.get("stars_2") or 0)}
+        if count and data.get("value") is not None:
+            signals["seller_rating"] = float(data["value"]) / 5  # stars out of 5, as 0-1
+        return signals

@@ -93,7 +93,8 @@ Nothing is hidden: a flag means "look closer, and pay only through the platform"
 |---|---|---|
 | Price 35% or more below the search's typical price (the median of its current matches, 5 or more) | 2 (3 at half or less) | Both |
 | Seller account under 30 days old (under 7 days: 3) | 2 | OLX |
-| Seller with no reviews, or rated under 4/5 | 1 | Vinted (item page), eBay |
+| Seller with no reviews, or rated under 4/5 | 1 | Vinted (item page), eBay, OLX (its ratings service) |
+| 2 or more negative reviews, a tenth of them or more (OLX: 1-2 stars) | 1 | Vinted, OLX |
 | Phrases: payment in advance, money transfers, WhatsApp/Telegram, payment links, "only by courier", "I'm abroad" | 2 each, up to 2 kinds | OLX description; Vinted title and description |
 | A phone number or email in the ad (to talk off the platform) | 2 | Vinted |
 | One photo or none | 1 | Both |
@@ -105,6 +106,11 @@ stored, never who the seller is.
 A seller with no reviews yet adds its point, but alone it gives no level: only a grey
 *"ⓘ Seller has no reviews yet"* under the listing (`risk_notes`). With any other sign it counts
 toward the level, and the level's reasons include it.
+
+OLX's seller ratings (what an ad's page shows, e.g. *"5.0 / 5, 18 ratinguri"*) come from its
+public ratings service by the seller's id, looked up once per listing (at most 40 per search per
+run, those in the price range first) and kept on it; a seller is looked up once per run. Most OLX
+sellers have none: OLX only collects ratings after a purchase with OLX delivery.
 
 Vinted shows the description and the seller's reviews only on the item's page,
 so the monitor reads it for listings it hasn't stored yet that pass the

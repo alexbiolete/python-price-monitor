@@ -78,6 +78,7 @@ def due_searches(searches, settings, now):
     return due
 
 
+SELLER_KEYS = ("seller_reviews", "seller_rating", "seller_negative_reviews")
 SKIP_MEMO = 1000  # old items whose page we've read, remembered per search so it isn't read again
 
 
@@ -94,7 +95,7 @@ def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct,
     stamp = to_db_time(now)
     state = spec.state if spec is not None else {}
     skipped_old = set(state.get("skipped_old") or [])
-    stats = {"matching": 0, "filtered": 0, "out_of_range": 0, "no_price": 0, "too_old": 0, "pages": 0}
+    stats = {"matching": 0, "filtered": 0, "out_of_range": 0, "no_price": 0, "too_old": 0, "pages": 0, "sellers": 0}
     fmt = lambda amount: fmt_price(amount, "RON")  # noqa: E731
 
     # 1. The search's filters. The price range only decides what's reported: ads outside it are kept
@@ -129,6 +130,7 @@ def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct,
 
     new, drops = [], []
     budget = provider.max_enrich if provider is not None and provider.needs_enrich else 0
+    seller_budget = provider.max_seller_lookups if provider is not None and provider.rates_sellers else 0
     for l, price_ron, in_range in candidates:
         row = rows.get(l.external_id)
         stored_signals = json_object(row["risk_signals"]) if row and row["risk_signals"] else None
@@ -153,6 +155,15 @@ def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct,
             signals = stored_signals  # read from its page before; the page isn't read again
         else:
             signals = risk.static_signals(l, search["platform"])
+            if provider is not None and provider.rates_sellers:
+                # The seller's rating: kept from an earlier run, else looked up (within the budget)
+                kept = {k: v for k, v in (stored_signals or {}).items() if k in SELLER_KEYS}
+                if "seller_reviews" in kept:
+                    signals.update(kept)
+                elif seller_budget > 0 and l.seller_id:
+                    seller_budget -= 1
+                    stats["sellers"] += 1
+                    signals.update(provider.seller_signals(l) or {})
         level, score, reasons, notes = risk.assess(signals, price_ron, typical, fmt)
         stats["matching" if in_range else "out_of_range"] += 1
         item = {"title": l.title, "url": l.url, "image_url": l.image_url, "location": l.location,
@@ -325,10 +336,10 @@ def _tick(db, platforms, search_ids):
             error = None if listings else "The platform returned no results; check the search URL and filters"
             flagged = sum(1 for x in new + drops if x["risk_level"])
             log.info("[%s] %s: %d results, %d matching, %d outside the price range (kept), %d filtered out,"
-                     " %d older than %s days, %d without price, %d item pages read%s",
+                     " %d older than %s days, %d without price, %d item pages read, %d sellers looked up%s",
                      label, s["name"], len(listings), stats["matching"], stats["out_of_range"], stats["filtered"],
                      stats["too_old"],
-                     max_age or "∞", stats["no_price"], stats["pages"],
+                     max_age or "∞", stats["no_price"], stats["pages"], stats["sellers"],
                      " (baseline saved, no email)" if baseline
                      else f"; {len(new)} new, {len(drops)} price drops, {flagged} flagged")
             if listings:  # a failed or empty run says nothing about the stored ads
