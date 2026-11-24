@@ -82,6 +82,7 @@ def landed_cost(price, shipping, currency, from_country, duty_pct=0.0):
 class EbayProvider(Provider):
     name = "ebay"
     label = "eBay"
+    seller_info = ("reviews",)
     search_delay = 2
 
     def __init__(self):

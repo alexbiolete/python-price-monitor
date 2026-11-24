@@ -87,6 +87,9 @@ class Provider:
     search_delay = 3
     # A search on this platform runs at most this often, whatever its interval (0: no limit)
     min_interval_minutes = 0
+    # What the platform shows about a seller, for the scam signals: "reviews" (count, rating),
+    # "account_age". The dashboard says what a platform doesn't show
+    seller_info = ()
 
     def __init__(self):
         self.log = logging.getLogger(f"price_monitor.{self.name}")

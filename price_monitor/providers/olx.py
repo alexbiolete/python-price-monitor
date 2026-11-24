@@ -54,6 +54,7 @@ def page_url_to_params(page_url):
 class OlxProvider(Provider):
     name = "olx"
     label = "OLX"
+    seller_info = ("reviews", "account_age")
 
     def category_id(self, spec):
         if spec.options.get("category_id"):

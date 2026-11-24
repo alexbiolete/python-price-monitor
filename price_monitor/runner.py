@@ -282,7 +282,7 @@ def _tick(db, platforms, search_ids):
     settings = db.one("SELECT * FROM settings WHERE id = 1")
     # The platforms this copy runs, for the dashboard to offer
     db.execute("UPDATE settings SET providers = ?, last_tick_at = ? WHERE id = 1",
-               (json.dumps([{"name": c.name, "label": c.label} for c in PROVIDERS.values()
+               (json.dumps([{"name": c.name, "label": c.label, "seller_info": list(c.seller_info)} for c in PROVIDERS.values()
                             if allowed is None or c.name in allowed]), to_db_time(now)))
     db.commit()
     rates.refresh(db, now)  # BNR's exchange rates, at most every few hours

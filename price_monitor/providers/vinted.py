@@ -96,6 +96,7 @@ def items_from_page(html):
 class VintedProvider(Provider):
     name = "vinted"
     label = "Vinted"
+    seller_info = ("reviews",)
     search_delay = 5
     needs_enrich = True
     item_delay = 1.5
