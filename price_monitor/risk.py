@@ -72,8 +72,10 @@ def typical_price(prices):
 
 
 def assess(signals, price_ron, typical, fmt_price):
-    """(level or None, score, reasons) for a listing."""
-    score, reasons = 0, []
+    """(level or None, score, reasons, notes) for a listing. Notes repeat the reasons worth a mention
+    even when the listing isn't flagged (a seller with no reviews yet); the email shows them as a
+    grey line when it doesn't show the flag."""
+    score, reasons, notes = 0, [], []
 
     if typical:
         ratio = price_ron / typical
@@ -96,6 +98,7 @@ def assess(signals, price_ron, typical, fmt_price):
     if reviews == 0:
         score += 1
         reasons.append("seller has no reviews")
+        notes.append("seller has no reviews yet")
     elif reviews and reviews >= 3 and signals.get("seller_rating") is not None and signals["seller_rating"] < 0.8:
         score += 1
         reasons.append(f"seller rated {signals['seller_rating'] * 5:.1f}/5")
@@ -123,7 +126,7 @@ def assess(signals, price_ron, typical, fmt_price):
         reasons.append("no protected payment (OLX delivery off)")
 
     level = next((name for minimum, name in LEVELS if score >= minimum), None)
-    return level, score, reasons
+    return level, score, reasons, notes
 
 
 def contact_in_text(text):

@@ -87,7 +87,7 @@ Nothing is hidden: a flag means "look closer, and pay only through the platform"
 |---|---|---|
 | Price 35% or more below the search's typical price (the median of its current matches, 5 or more) | 2 (3 at half or less) | Both |
 | Seller account under 30 days old (under 7 days: 3) | 2 | OLX |
-| Seller with no reviews, or rated under 4/5 | 1 | Vinted (item page) |
+| Seller with no reviews, or rated under 4/5 | 1 | Vinted (item page), eBay |
 | Phrases: payment in advance, money transfers, WhatsApp/Telegram, payment links, "only by courier", "I'm abroad" | 2 each, up to 2 kinds | OLX description; Vinted title and description |
 | A phone number or email in the ad (to talk off the platform) | 2 | Vinted |
 | One photo or none | 1 | Both |
@@ -95,6 +95,10 @@ Nothing is hidden: a flag means "look closer, and pay only through the platform"
 
 1 point is `low`, 2-3 `medium`, 4 or more `high`. Only these derived facts are
 stored, never who the seller is.
+
+A seller with no reviews yet also gets a mention when the listing isn't flagged (alone it's only
+`low`, which the email doesn't show): a grey *"ⓘ Seller has no reviews yet"* under the listing
+(`risk_notes`). A flagged listing already lists it among its reasons.
 
 Vinted shows the description and the seller's reviews only on the item's page,
 so the monitor reads it for listings it hasn't stored yet that pass the
@@ -191,7 +195,7 @@ Run `--once` every 5 minutes:
 ## Database contract
 
 The monitor owns the schema. It creates the tables on start and adds new columns
-itself (`settings.schema_version`, now 5). Other apps may read everything and
+itself (`settings.schema_version`, now 7). Other apps may read everything and
 write only the columns marked ✎. All times are UTC `DATETIME`s. JSON columns hold
 text.
 
@@ -222,7 +226,9 @@ Its columns: `search_id`, `platform`, `external_id`, `title`, `url`, `image_url`
 `price`, `currency`, `location`, `posted_at` (given or estimated),
 `first_seen`, `last_seen`, and the scam flags: `risk_level` (`low`/`medium`/`high`
 or `NULL`), `risk_score`, `risk_reasons` (JSON list of sentences) and
-`risk_signals` (the derived facts they came from), `price_detail` (how `price` adds up, for
+`risk_signals` (the derived facts they came from), `risk_notes` (JSON list of reasons worth a
+mention even when the listing isn't flagged, e.g. "seller has no reviews yet"; show them when not
+showing the flag; `NULL`: none), `price_detail` (how `price` adds up, for
 eBay's totals), and `pin_order` ✎: pinned in the dashboard, in this order (lower first; `NULL`: not
 pinned). The monitor never deletes a pinned listing, and `--resend-all` keeps them.
 `inactive_at`: when the ad was found sold or removed (`NULL`: active), and `checked_at`: when it

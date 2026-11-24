@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 # Columns added after the first version: (table, column, MySQL type, SQLite type).
 # Added on start when missing, so an existing database upgrades itself.
@@ -34,6 +34,9 @@ ADDED_COLUMNS = [
     # ad was found sold or removed (NULL: active), checked_at: the last such check
     ("listings", "inactive_at", "DATETIME NULL", "TEXT"),
     ("listings", "checked_at", "DATETIME NULL", "TEXT"),
+    # v7: worth-knowing facts that aren't scam signs and add no points (risk.py), e.g. a seller with
+    # no reviews yet: a JSON list of sentences, NULL when none
+    ("listings", "risk_notes", "TEXT NULL", "TEXT"),
 ]
 
 MYSQL_SCHEMA = [

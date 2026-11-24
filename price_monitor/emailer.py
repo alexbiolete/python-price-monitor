@@ -75,7 +75,7 @@ def _listing_row(item, price_html):
         f'<td style="padding:10px 0;border-top:1px solid {LINE};vertical-align:top">'
         f'<a href="{esc(item["url"])}" style="color:{INK};font-size:14px;font-weight:600;line-height:1.4;text-decoration:none">{esc(item["title"])}</a>'
         + (f'<div style="margin-top:2px;color:{MUTED};font-size:12px">{esc(meta)}</div>' if meta else "")
-        + _risk_html(item)
+        + _risk_html(item) + _notes_html(item)
         + f'<div style="margin-top:4px"><a href="{esc(item["url"])}" style="color:{ACCENT};font-size:12px;font-weight:600;text-decoration:none">View listing →</a></div>'
         "</td>"
         f'<td align="right" style="padding:10px 0 10px 10px;border-top:1px solid {LINE};vertical-align:top;white-space:nowrap;font-size:14px;color:{INK}">{price_html}</td>'
@@ -93,6 +93,15 @@ def _risk_html(item):
             f'<b>⚠ {label}:</b> {esc("; ".join(reasons))}</div>')
 
 
+def _notes_html(item):
+    """Worth knowing, not a warning: one grey line, when the flag (which has them too) isn't shown"""
+    notes = item.get("risk_notes") or []
+    if not notes or (item.get("risk_level") in SHOWN_RISK and item.get("risk_reasons")):
+        return ""
+    text = "; ".join(notes)
+    return f'<div style="margin-top:4px;color:{MUTED};font-size:12px;line-height:1.45">ⓘ {esc(text[0].upper() + text[1:])}</div>'
+
+
 def _detail_html(item):
     """How the price adds up (eBay's total), small under it"""
     if not item.get("price_detail"):
@@ -102,9 +111,11 @@ def _detail_html(item):
 
 
 def _risk_text(item):
-    if item.get("risk_level") not in SHOWN_RISK or not item.get("risk_reasons"):
-        return ""
-    return f"\n      ⚠ {'Likely' if item['risk_level'] == 'high' else 'Possible'} scam: {'; '.join(item['risk_reasons'])}"
+    if item.get("risk_level") in SHOWN_RISK and item.get("risk_reasons"):
+        return f"\n      ⚠ {'Likely' if item['risk_level'] == 'high' else 'Possible'} scam: {'; '.join(item['risk_reasons'])}"
+    if item.get("risk_notes"):
+        return f"\n      ⓘ {'; '.join(item['risk_notes'])}"
+    return ""
 
 
 def _section(title, rows):
