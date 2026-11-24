@@ -67,7 +67,12 @@ After that, each run reports listings it hasn't seen and drops of at least
 
 ### What a search filters
 
-- **Price:** `min_price` / `max_price` in RON. EUR is converted at `EUR_TO_RON`.
+- **Price:** `min_price` / `max_price` in RON. EUR is converted at `EUR_TO_RON`. Ads outside
+  the range are still stored (for the price estimate, [docs/price-estimate.md](docs/price-estimate.md))
+  but never emailed; the dashboard shows only the ones in the range. To see the whole market,
+  leave the price out of the search's link (OLX's price filter, eBay's `_udlo`/`_udhi`) and set it
+  here instead: the platform never returns what its link filters out. Widening the range later
+  doesn't email the ads already stored.
 - **Must contain** (`include_keywords`): the title has to contain at least one of
   these. Useful on Vinted, whose search also returns loosely related items.
 - **Leave out** (`exclude_keywords`): titles containing any of these are skipped.
@@ -195,7 +200,7 @@ Run `--once` every 5 minutes:
 ## Database contract
 
 The monitor owns the schema. It creates the tables on start and adds new columns
-itself (`settings.schema_version`, now 7). Other apps may read everything and
+itself (`settings.schema_version`, now 8). Other apps may read everything and
 write only the columns marked ✎. All times are UTC `DATETIME`s. JSON columns hold
 text.
 
@@ -221,9 +226,11 @@ Other apps may also **delete** `listings` rows (with their `price_history`, as t
 Listings page does). Nothing else remembers a listing, so the monitor's next run finds it again,
 and reports it as new, if its search still matches the ad.
 
-**`listings`**: what each search found and still matches. Unique on `(search_id, external_id)`.
+**`listings`**: what each search found and still matches its keywords, **also outside its price
+range**: show a search's listings with `price_ron` between its `min_price` and `max_price`, to match
+the email. Unique on `(search_id, external_id)`.
 Its columns: `search_id`, `platform`, `external_id`, `title`, `url`, `image_url`,
-`price`, `currency`, `location`, `posted_at` (given or estimated),
+`price`, `currency`, `price_ron` (the price in lei the range compares; eBay's total), `location`, `posted_at` (given or estimated),
 `first_seen`, `last_seen`, and the scam flags: `risk_level` (`low`/`medium`/`high`
 or `NULL`), `risk_score`, `risk_reasons` (JSON list of sentences) and
 `risk_signals` (the derived facts they came from), `risk_notes` (JSON list of reasons worth a

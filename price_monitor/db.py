@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 # Columns added after the first version: (table, column, MySQL type, SQLite type).
 # Added on start when missing, so an existing database upgrades itself.
@@ -37,6 +37,9 @@ ADDED_COLUMNS = [
     # v7: worth-knowing facts that aren't scam signs and add no points (risk.py), e.g. a seller with
     # no reviews yet: a JSON list of sentences, NULL when none
     ("listings", "risk_notes", "TEXT NULL", "TEXT"),
+    # v8: ads outside a search's price range are stored too (for the price estimate); price_ron is
+    # the price in lei the range compares, so readers filter on it (min_price <= price_ron <= max_price)
+    ("listings", "price_ron", "DOUBLE NULL", "REAL"),
 ]
 
 MYSQL_SCHEMA = [

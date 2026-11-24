@@ -83,7 +83,9 @@ SKIP_MEMO = 1000  # old items whose page we've read, remembered per search so it
 
 def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct, max_age_days=None,
             provider=None, spec=None):
-    """Store matching listings, flag possible scams; return what to report."""
+    """Store matching listings, flag possible scams; return what to report. Listings outside the
+    search's price range are stored too (for the price estimate), but never reported: the
+    dashboard shows the ones whose price_ron is in the range."""
     is_baseline = search["baseline_at"] is None
     oldest = now - timedelta(days=max_age_days) if max_age_days else None
     includes = [k.lower() for k in json_list(search["include_keywords"]) if k.strip()]
@@ -92,10 +94,10 @@ def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct,
     stamp = to_db_time(now)
     state = spec.state if spec is not None else {}
     skipped_old = set(state.get("skipped_old") or [])
-    stats = {"matching": 0, "filtered": 0, "no_price": 0, "too_old": 0, "pages": 0}
+    stats = {"matching": 0, "filtered": 0, "out_of_range": 0, "no_price": 0, "too_old": 0, "pages": 0}
     fmt = lambda amount: fmt_price(amount, "RON")  # noqa: E731
 
-    # 1. The search's filters
+    # 1. The search's filters. The price range only decides what's reported: ads outside it are kept
     candidates, seen = [], set()
     for l in listings:
         if l.price is None or not l.currency:
@@ -109,20 +111,22 @@ def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct,
             continue
         price_ron = to_ron(l.price, l.currency, eur_to_ron)
         title = l.title.lower()
-        if (includes and not any(k in title for k in includes)) or any(k in title for k in excludes) \
-                or (lo is not None and price_ron < lo) or (hi is not None and price_ron > hi):
+        if (includes and not any(k in title for k in includes)) or any(k in title for k in excludes):
             stats["filtered"] += 1
             continue
-        candidates.append((l, price_ron))
+        in_range = (lo is None or price_ron >= lo) and (hi is None or price_ron <= hi)
+        candidates.append((l, price_ron, in_range))
+    # In the range first, so they get the item pages a run may read (max_enrich)
+    candidates.sort(key=lambda c: not c[2])
 
-    # 2. What's typical here: the median of everything that matches (for "far below the typical price")
-    typical = risk.typical_price([p for _, p in candidates])
+    # 2. What's typical here: the median of everything in the range (for "far below the typical price")
+    typical = risk.typical_price([p for _, p, in_range in candidates if in_range])
     rows = {r["external_id"]: r for r in db.all(
         "SELECT id, external_id, price, currency, risk_signals, pin_order FROM listings WHERE search_id = ?", (search["id"],))}
 
     new, drops = [], []
     budget = provider.max_enrich if provider is not None and provider.needs_enrich else 0
-    for l, price_ron in candidates:
+    for l, price_ron, in_range in candidates:
         row = rows.get(l.external_id)
         stored_signals = json_object(row["risk_signals"]) if row and row["risk_signals"] else None
 
@@ -146,7 +150,7 @@ def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct,
         else:
             signals = risk.static_signals(l, search["platform"])
         level, score, reasons, notes = risk.assess(signals, price_ron, typical, fmt)
-        stats["matching"] += 1
+        stats["matching" if in_range else "out_of_range"] += 1
         item = {"title": l.title, "url": l.url, "image_url": l.image_url, "location": l.location,
                 "price": l.price, "currency": l.currency, "price_ron": price_ron,
                 "platform_label": platform_label, "risk_level": level, "risk_reasons": reasons,
@@ -158,13 +162,13 @@ def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct,
             cur = db.execute(
                 "INSERT INTO listings (search_id, platform, external_id, title, url, image_url, price, currency,"
                 " location, posted_at, first_seen, last_seen, risk_level, risk_score, risk_reasons, risk_signals,"
-                " risk_notes, price_detail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " risk_notes, price_detail, price_ron) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (search["id"], search["platform"], l.external_id, l.title[:500], l.url, l.image_url,
                  l.price, l.currency, (l.location or None) and l.location[:200], to_db_time(l.posted_at),
-                 stamp, stamp) + risk_values + ((l.price_detail or None) and l.price_detail[:300],))
+                 stamp, stamp) + risk_values + ((l.price_detail or None) and l.price_detail[:300], price_ron))
             db.execute("INSERT INTO price_history (listing_id, price, currency, seen_at) VALUES (?, ?, ?, ?)",
                        (cur.lastrowid, l.price, l.currency, stamp))
-            if not is_baseline and search["notify_new"]:
+            if in_range and not is_baseline and search["notify_new"]:
                 new.append(item)
             continue
 
@@ -173,15 +177,20 @@ def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct,
                        (row["id"], l.price, l.currency, stamp))
             if l.currency == row["currency"] and row["price"] > 0:
                 drop_pct = (row["price"] - l.price) / row["price"] * 100
-                if drop_pct >= drop_min_pct and not is_baseline and search["notify_price_drops"]:
+                if in_range and drop_pct >= drop_min_pct and not is_baseline and search["notify_price_drops"]:
                     drops.append({**item, "old_price": row["price"], "drop_pct": drop_pct})
         db.execute(
             "UPDATE listings SET title = ?, url = ?, image_url = ?, price = ?, currency = ?,"
             " location = COALESCE(?, location), posted_at = COALESCE(?, posted_at), last_seen = ?, inactive_at = NULL,"
             " risk_level = ?, risk_score = ?,"
-            " risk_reasons = ?, risk_signals = ?, risk_notes = ?, price_detail = ? WHERE id = ?",
+            " risk_reasons = ?, risk_signals = ?, risk_notes = ?, price_detail = ?, price_ron = ? WHERE id = ?",
             (l.title[:500], l.url, l.image_url, l.price, l.currency, (l.location or None) and l.location[:200],
-             to_db_time(l.posted_at), stamp) + risk_values + ((l.price_detail or None) and l.price_detail[:300], row["id"]))
+             to_db_time(l.posted_at), stamp) + risk_values + ((l.price_detail or None) and l.price_detail[:300], price_ron, row["id"]))
+
+    # Stored before price_ron existed (v8) and not in this run's results: worked out from their price
+    for r in db.all("SELECT id, price, currency FROM listings WHERE search_id = ? AND price_ron IS NULL",
+                    (search["id"],)):
+        db.execute("UPDATE listings SET price_ron = ? WHERE id = ?", (to_ron(r["price"], r["currency"]), r["id"]))
 
     if skipped_old:
         state["skipped_old"] = sorted(skipped_old)[-SKIP_MEMO:]
@@ -225,8 +234,8 @@ def recheck(db, search, provider, now):
             db.execute("UPDATE listings SET inactive_at = ? WHERE id = ?", (stamp, row["id"]))
         elif result.price and result.currency and (result.price != row["price"] or result.currency != row["currency"]):
             repriced += 1
-            db.execute("UPDATE listings SET price = ?, currency = ? WHERE id = ?",
-                       (result.price, result.currency, row["id"]))
+            db.execute("UPDATE listings SET price = ?, currency = ?, price_ron = ? WHERE id = ?",
+                       (result.price, result.currency, to_ron(result.price, result.currency), row["id"]))
             db.execute("INSERT INTO price_history (listing_id, price, currency, seen_at) VALUES (?, ?, ?, ?)",
                        (row["id"], result.price, result.currency, stamp))
     return checked, gone, repriced
@@ -311,9 +320,10 @@ def _tick(db, platforms, search_ids):
             status = "ok" if listings else "empty"
             error = None if listings else "The platform returned no results; check the search URL and filters"
             flagged = sum(1 for x in new + drops if x["risk_level"] in ("medium", "high"))
-            log.info("[%s] %s: %d results, %d matching, %d filtered out, %d older than %s days, %d without price,"
-                     " %d item pages read%s",
-                     label, s["name"], len(listings), stats["matching"], stats["filtered"], stats["too_old"],
+            log.info("[%s] %s: %d results, %d matching, %d outside the price range (kept), %d filtered out,"
+                     " %d older than %s days, %d without price, %d item pages read%s",
+                     label, s["name"], len(listings), stats["matching"], stats["out_of_range"], stats["filtered"],
+                     stats["too_old"],
                      max_age or "∞", stats["no_price"], stats["pages"],
                      " (baseline saved, no email)" if baseline
                      else f"; {len(new)} new, {len(drops)} price drops, {flagged} flagged")
