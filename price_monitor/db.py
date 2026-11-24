@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 # Columns added after the first version: (table, column, MySQL type, SQLite type).
 # Added on start when missing, so an existing database upgrades itself.
@@ -51,6 +51,8 @@ ADDED_COLUMNS = [
     # v13: the highest risk level emailed ("none", "low", "medium", "high": all); above it, listings
     # are stored and shown, not emailed
     ("settings", "email_max_risk", "VARCHAR(10) NOT NULL DEFAULT 'high'", "TEXT NOT NULL DEFAULT 'high'"),
+    # v14: one email for all products a check found something for (1), or one per product (0)
+    ("settings", "merge_emails", "TINYINT(1) NOT NULL DEFAULT 1", "INTEGER NOT NULL DEFAULT 1"),
 ]
 
 # Columns renamed since: (table, old name, new name), renamed in place on start, before the above

@@ -29,7 +29,7 @@ cp .env.example .env                        # then fill it in
 | `EMAIL_TITLE` | The title at the top of the email |
 | `EMAIL_FROM_NAME`, `EMAIL_FROM_ADDRESS` | The sender shown in the inbox. The address defaults to `SMTP_USER` |
 | `EMAIL_KICKER` | The small label above the heading (default "Price monitor"; empty: none). It stays out of the inbox preview |
-| `EMAIL_SUBJECT` | One email per product; its subject, with `{product}` filled in (default *Listing updates for {product}*). The same each time for a product, with reply headers to match, so each product's emails are one conversation. What's new leads the preview |
+| `EMAIL_SUBJECT`, `EMAIL_SUBJECT_ALL` | The subjects: one email for all products a check found something for (`settings.merge_emails`, the default; *Listing updates*), or one per product (*Listing updates for {product}*, `{product}` filled in). Each is the same every time, with reply headers to match, so they form one conversation (per product). What's new leads the preview |
 | `ENVIRONMENT` | Which copy sent the email (`production` on the server, `local` on a laptop), shown in capitals next to the label. Default: the machine's name |
 | `EMAIL_FOOTER` | The line under the email |
 | `DASHBOARD_URL` | The email's "Open in dashboard" button. Unset: no button |
@@ -210,7 +210,7 @@ Run `--once` every 5 minutes:
 ## Database contract
 
 The monitor owns the schema. It creates the tables on start and adds new columns
-itself (`settings.schema_version`, now 13). Other apps may read everything and
+itself (`settings.schema_version`, now 14). Other apps may read everything and
 write only the columns marked ✎. All times are UTC `DATETIME`s. JSON columns hold
 text.
 
@@ -276,6 +276,7 @@ removed (`inactive`), and when it showed up in the results again after that (`ac
 | `providers` | JSON list of `{name, label, seller_info, runs}`: every platform module, what each shows about a seller (`reviews`, `account_age`), and whether the copy writing here runs it |
 | `exchange_rates`, `exchange_rates_at` | The rates to lei in use, JSON `{date, source: "BNR", rates: {EUR: 5.34, ...}}`, and when they were fetched |
 | `prices_in_ron` ✎ | The dashboard's table shows prices in lei (the ad's own under them); `0`: as the ad shows them. Default `1` |
+| `merge_emails` ✎ | `1` (default): one email for all products a check found something for; `0`: one per product |
 | `email_max_risk` ✎ | The highest risk level emailed: `none` (only listings without one), `low`, `medium` or `high` (all, the default). Listings above it are stored and shown, not emailed |
 
 Deleting a search deletes its listings and their history (foreign keys cascade).

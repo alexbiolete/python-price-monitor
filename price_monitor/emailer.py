@@ -126,9 +126,11 @@ def _section(title, rows):
             f'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:4px;border-bottom:1px solid {LINE}">{"".join(rows)}</table>')
 
 
-def by_product(reports):
-    """The reports grouped by product (the search's name: one search per product per platform), in
-    their order: [(product, reports)], one email each"""
+def by_product(reports, merge=False):
+    """The emails to send: [(product, reports)], one per product (the search's name: one search per
+    product per platform), in their order; merged: one for all, product None"""
+    if merge:
+        return [(None, reports)] if reports else []
     groups = {}
     for r in reports:
         groups.setdefault(r["search"]["name"], []).append(r)
@@ -136,14 +138,18 @@ def by_product(reports):
 
 
 def render_digest(reports, dashboard_url=None, product=None):
-    """reports: [{"search": {...}, "new": [...], "drops": [...]}], one product's -> (subject, html, text)"""
+    """reports: [{"search": {...}, "new": [...], "drops": [...]}], one product's, or all (product None)
+    -> (subject, html, text)"""
     n_new = sum(len(r["new"]) for r in reports)
     n_drops = sum(len(r["drops"]) for r in reports)
-    product = product or reports[0]["search"]["name"]
     title = summary(n_new, n_drops)
     title = title[0].upper() + title[1:]
-    platforms = list(dict.fromkeys(r["search"]["platform_label"] for r in reports))
-    intro = "On " + ", ".join(platforms)
+    if product:
+        platforms = list(dict.fromkeys(r["search"]["platform_label"] for r in reports))
+        intro = "On " + ", ".join(platforms)
+    else:
+        products = list(dict.fromkeys(r["search"]["name"] for r in reports))
+        intro = ("For " + ", ".join(products)) if len(products) <= 3 else f"For {len(products)} products"
     flagged = sum(1 for r in reports for x in r["new"] + r["drops"] if x.get("risk_level") in SHOWN_RISK)
     if flagged:
         intro += f" · {flagged} with warning signs"
@@ -156,7 +162,8 @@ def render_digest(reports, dashboard_url=None, product=None):
     footer = setting("EMAIL_FOOTER", "A notification from your price monitor.")
     # The same subject every time for a product, so mail apps keep its emails in one conversation (by
     # the subject, and the reply headers send_email adds for it); what's new leads the inbox preview
-    subject = setting("EMAIL_SUBJECT", "Listing updates for {product}").replace("{product}", product)
+    subject = (setting("EMAIL_SUBJECT", "Listing updates for {product}").replace("{product}", product) if product
+               else setting("EMAIL_SUBJECT_ALL", "Listing updates"))
     preview = f"{title} · {intro}"
 
     body, text = [], [title, "", intro]

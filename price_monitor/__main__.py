@@ -121,8 +121,8 @@ def test_email(db):
             reports.append({"search": {**s, "platform_label": label}, "new": items[1:], "drops": [drop]})
     if not reports:
         raise SystemExit("No stored listings yet; run a check first")
-    settings = db.one("SELECT email_to FROM settings WHERE id = 1")
-    for product, group in by_product(reports):  # one email per product, as the real ones
+    settings = db.one("SELECT email_to, merge_emails FROM settings WHERE id = 1")
+    for product, group in by_product(reports, bool(settings["merge_emails"])):  # as the real ones
         subject, html_body, text_body = render_digest(group, os.getenv("DASHBOARD_URL"), product)
         send_email("[TEST] " + subject, html_body, text_body, settings["email_to"] or os.getenv("EMAIL_TO"))
 

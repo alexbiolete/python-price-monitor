@@ -389,7 +389,8 @@ def _tick(db, platforms, search_ids):
 
     if reports:
         to = settings["email_to"] or os.getenv("EMAIL_TO")
-        for product, group in by_product(reports):  # one email (and conversation) per product
+        merge = bool(settings.get("merge_emails", 1))  # one email for all products, or one per product
+        for product, group in by_product(reports, merge):
             subject, html_body, text_body = render_digest(group, os.getenv("DASHBOARD_URL"), product)
             try:
                 send_email(subject, html_body, text_body, to)
