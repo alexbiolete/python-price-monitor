@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 # Columns added after the first version: (table, column, MySQL type, SQLite type).
 # Added on start when missing, so an existing database upgrades itself.
@@ -95,6 +95,15 @@ MYSQL_SCHEMA = [
         INDEX idx_price_history_listing (listing_id),
         CONSTRAINT fk_price_history_listing FOREIGN KEY (listing_id) REFERENCES listings(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
+    # v9: when an ad was found sold or removed ("inactive"), or back up after that ("active")
+    """CREATE TABLE IF NOT EXISTS status_history (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        listing_id BIGINT NOT NULL,
+        status VARCHAR(10) NOT NULL,
+        seen_at DATETIME NOT NULL,
+        INDEX idx_status_history_listing (listing_id),
+        CONSTRAINT fk_status_history_listing FOREIGN KEY (listing_id) REFERENCES listings(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
     """CREATE TABLE IF NOT EXISTS settings (
         id TINYINT PRIMARY KEY,
         enabled TINYINT(1) NOT NULL DEFAULT 1,
@@ -140,6 +149,11 @@ SQLITE_SCHEMA = [
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         listing_id INTEGER NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
         price REAL NOT NULL, currency TEXT NOT NULL, seen_at TEXT NOT NULL
+    )""",
+    """CREATE TABLE IF NOT EXISTS status_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        listing_id INTEGER NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+        status TEXT NOT NULL, seen_at TEXT NOT NULL
     )""",
     """CREATE TABLE IF NOT EXISTS settings (
         id INTEGER PRIMARY KEY,
@@ -211,6 +225,11 @@ class Db:
         for statement in schema:
             self.execute(statement)
         self._add_missing_columns()
+        version = (self.one("SELECT schema_version FROM settings WHERE id = 1") or {"schema_version": SCHEMA_VERSION})
+        if version["schema_version"] < 9:
+            # Ads already found inactive before status_history: their one known change
+            self.execute("INSERT INTO status_history (listing_id, status, seen_at)"
+                         " SELECT id, 'inactive', inactive_at FROM listings WHERE inactive_at IS NOT NULL")
         self.execute("UPDATE settings SET schema_version = ? WHERE id = 1 AND schema_version < ?",
                      (SCHEMA_VERSION, SCHEMA_VERSION))
         self.commit()

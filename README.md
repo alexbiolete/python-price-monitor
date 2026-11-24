@@ -207,7 +207,7 @@ Run `--once` every 5 minutes:
 ## Database contract
 
 The monitor owns the schema. It creates the tables on start and adds new columns
-itself (`settings.schema_version`, now 8). Other apps may read everything and
+itself (`settings.schema_version`, now 9). Other apps may read everything and
 write only the columns marked ✎. All times are UTC `DATETIME`s. JSON columns hold
 text.
 
@@ -229,7 +229,7 @@ text.
 | `provider_state` | The monitor's own (e.g. a detected OLX category) |
 | `last_run_at`, `last_status` (`ok`/`empty`/`error`), `last_error`, `last_result_count`, `last_match_count` | Written after every run |
 
-Other apps may also **delete** `listings` rows (with their `price_history`, as the dashboard's
+Other apps may also **delete** `listings` rows (with their `price_history` and `status_history`, as the dashboard's
 Listings page does). Nothing else remembers a listing, so the monitor's next run finds it again,
 and reports it as new, if its search still matches the ad.
 
@@ -254,7 +254,10 @@ a missing ad (404, or a redirect away from it) or one its page says is closed ge
 pages also update the price. An inactive ad that shows up in the results again is active again.
 
 **`price_history`**: `listing_id`, `price`, `currency`, `seen_at`. One row when a
-listing is first seen, and one for every change.
+listing is first seen (`seen_at` = its `first_seen`), and one for every change.
+
+**`status_history`**: `listing_id`, `status`, `seen_at`. A row when the ad was found sold or
+removed (`inactive`), and when it showed up in the results again after that (`active`).
 
 **`settings`**: a single row, `id = 1`.
 

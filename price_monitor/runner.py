@@ -126,7 +126,8 @@ def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct,
     # 2. What's typical here: the median of everything in the range (for "far below the typical price")
     typical = risk.typical_price([p for _, p, in_range in candidates if in_range])
     rows = {r["external_id"]: r for r in db.all(
-        "SELECT id, external_id, price, currency, risk_signals, pin_order FROM listings WHERE search_id = ?", (search["id"],))}
+        "SELECT id, external_id, price, currency, risk_signals, pin_order, inactive_at FROM listings WHERE search_id = ?",
+        (search["id"],))}
 
     new, drops = [], []
     budget = provider.max_enrich if provider is not None and provider.needs_enrich else 0
@@ -187,6 +188,9 @@ def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct,
                 new.append(item)
             continue
 
+        if row["inactive_at"] is not None:  # found sold or removed before, and it's back
+            db.execute("INSERT INTO status_history (listing_id, status, seen_at) VALUES (?, 'active', ?)",
+                       (row["id"], stamp))
         if l.price != row["price"] or l.currency != row["currency"]:
             db.execute("INSERT INTO price_history (listing_id, price, currency, seen_at) VALUES (?, ?, ?, ?)",
                        (row["id"], l.price, l.currency, stamp))
@@ -247,6 +251,8 @@ def recheck(db, search, provider, now):
         if result.gone:
             gone += 1
             db.execute("UPDATE listings SET inactive_at = ? WHERE id = ?", (stamp, row["id"]))
+            db.execute("INSERT INTO status_history (listing_id, status, seen_at) VALUES (?, 'inactive', ?)",
+                       (row["id"], stamp))
         elif result.price and result.currency and (result.price != row["price"] or result.currency != row["currency"]):
             repriced += 1
             db.execute("UPDATE listings SET price = ?, currency = ?, price_ron = ? WHERE id = ?",
