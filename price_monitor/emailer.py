@@ -136,16 +136,17 @@ def render_digest(reports, dashboard_url=None):
     flagged = sum(1 for r in reports for x in r["new"] + r["drops"] if x.get("risk_level") in SHOWN_RISK)
     if flagged:
         intro += f" · {flagged} with warning signs"
-    # A small label above the heading ("PRICE MONITOR"); empty: none. And an optional start for the
-    # subject ("Deals: 3 new…")
+    # A small label above the heading ("PRICE MONITOR"); empty: none
     kicker = setting("EMAIL_KICKER", "Price monitor")
     # Which copy sent it (ENVIRONMENT, e.g. production on the server, local on a laptop; shown in
     # capitals like the label), next to
     # the label; unset: the machine's name
     environment = setting("ENVIRONMENT", socket.gethostname().split(".")[0])
-    prefix = setting("EMAIL_SUBJECT_PREFIX", "")
     footer = setting("EMAIL_FOOTER", "A notification from your price monitor.")
-    subject = f"{prefix}: {summary(n_new, n_drops)}" if prefix else title
+    # The same subject every time, so mail apps keep the digests in one conversation (they group by
+    # subject); what's new is in the heading and leads the inbox preview
+    subject = setting("EMAIL_SUBJECT", "Price monitor updates")
+    preview = f"{title} · {intro}"
 
     body, text = [], [title, "", intro]
     for r in reports:
@@ -190,7 +191,7 @@ def render_digest(reports, dashboard_url=None):
 <title>{esc(title)}</title>
 </head>
 <body style="margin:0;padding:0;background:#ffffff;font-family:{FONT};-webkit-font-smoothing:antialiased">
-<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all">{esc(intro)}{PREVIEW_STOP}</div>
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;mso-hide:all">{esc(preview)}{PREVIEW_STOP}</div>
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#ffffff">
   <tr><td align="center" style="padding:16px 12px">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px">
