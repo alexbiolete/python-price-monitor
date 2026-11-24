@@ -33,7 +33,7 @@ cp .env.example .env                        # then fill it in
 | `ENVIRONMENT` | Which copy sent the email (`production` on the server, `local` on a laptop), shown in capitals next to the label. Default: the machine's name |
 | `EMAIL_FOOTER` | The line under the email |
 | `DASHBOARD_URL` | The email's "Open in dashboard" button. Unset: no button |
-| `EUR_TO_RON` | Rate for the min/max price filters on EUR listings (default 4.97) |
+| `EUR_TO_RON`, `USD_TO_RON`, ... | A fixed rate to lei, over the live one (unset: BNR's daily rates, see below) |
 | `PRICE_DROP_MIN_PCT` | Report drops of at least this many percent (default 3) |
 | `TICK_SECONDS` | How often the local loop checks what's due (default 60) |
 | `PLATFORMS` | The platforms this copy runs, e.g. `olx,vinted` (default: all). See [Server and laptop](#server-and-laptop) |
@@ -67,7 +67,10 @@ After that, each run reports listings it hasn't seen and drops of at least
 
 ### What a search filters
 
-- **Price:** `min_price` / `max_price` in RON. EUR is converted at `EUR_TO_RON`. Ads outside
+- **Price:** `min_price` / `max_price` in RON. Other currencies are converted at the National Bank of
+  Romania's daily rates (BNR, `curs.bnr.ro`): fetched at most every 6 hours and kept in `settings`, so
+  a failed fetch keeps the last ones (none yet: rough built-in rates); a new set also recalculates
+  every stored listing's `price_ron`. Ads outside
   the range are still stored (for the price estimate, [docs/price-estimate.md](docs/price-estimate.md))
   but never emailed; the dashboard shows only the ones in the range. To see the whole market,
   leave the price out of the search's link (OLX's price filter, eBay's `_udlo`/`_udhi`) and set it
@@ -137,7 +140,7 @@ delivered** to `EBAY_SHIP_TO` (default `RO`): price + the cheapest shipping ther
 shipped from outside the EU, customs duty (`{"duty_pct": N}` in `options`, 0 for consoles), import
 VAT on all of that (`IMPORT_VAT_PCT`, 21) and a courier's fee (`IMPORT_FEE_RON`, 0). The breakdown
 ("320 € + 45 € shipping + 77 € import VAT (21%)") is in `price_detail`, under the price in the email
-and the dashboard. Min/max compare that total in lei (`EUR_TO_RON`, `USD_TO_RON`, ...).
+and the dashboard. Min/max compare that total in lei, at BNR's rates.
 
 `facebook`: a Marketplace search with your filters set
 (`https://www.facebook.com/marketplace/bucharest/search/?query=...&minPrice=...&daysSinceListed=30`).
@@ -207,7 +210,7 @@ Run `--once` every 5 minutes:
 ## Database contract
 
 The monitor owns the schema. It creates the tables on start and adds new columns
-itself (`settings.schema_version`, now 9). Other apps may read everything and
+itself (`settings.schema_version`, now 10). Other apps may read everything and
 write only the columns marked ✎. All times are UTC `DATETIME`s. JSON columns hold
 text.
 
@@ -269,5 +272,7 @@ removed (`inactive`), and when it showed up in the results again after that (`ac
 | `run_requested_at` ✎ | "Run all now": the monitor turns it into a request on every enabled search |
 | `last_tick_at` | The last check (cron alive?) |
 | `providers` | JSON list of `{name, label}`: the platforms the copy writing here runs |
+| `exchange_rates`, `exchange_rates_at` | The rates to lei in use, JSON `{date, source: "BNR", rates: {EUR: 5.34, ...}}`, and when they were fetched |
+| `prices_in_ron` ✎ | The dashboard's table shows prices in lei (the ad's own under them); `0`: as the ad shows them. Default `1` |
 
 Deleting a search deletes its listings and their history (foreign keys cascade).

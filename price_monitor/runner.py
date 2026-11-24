@@ -286,6 +286,7 @@ def _tick(db, platforms, search_ids):
                (json.dumps([{"name": c.name, "label": c.label} for c in PROVIDERS.values()
                             if allowed is None or c.name in allowed]), to_db_time(now)))
     db.commit()
+    rates.refresh(db, now)  # BNR's exchange rates, at most every few hours
     if not settings["enabled"] and not search_ids:
         log.info("The monitor is turned off in settings; nothing to do")
         return 0

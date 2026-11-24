@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 # Columns added after the first version: (table, column, MySQL type, SQLite type).
 # Added on start when missing, so an existing database upgrades itself.
@@ -40,6 +40,11 @@ ADDED_COLUMNS = [
     # v8: ads outside a search's price range are stored too (for the price estimate); price_ron is
     # the price in lei the range compares, so readers filter on it (min_price <= price_ron <= max_price)
     ("listings", "price_ron", "DOUBLE NULL", "REAL"),
+    # v10: live exchange rates (rates.py; JSON {"date", "source", "rates": {currency: lei}}) and when
+    # they were last fetched; the dashboard's table shows prices in lei unless prices_in_ron is 0
+    ("settings", "exchange_rates", "TEXT NULL", "TEXT"),
+    ("settings", "exchange_rates_at", "DATETIME NULL", "TEXT"),
+    ("settings", "prices_in_ron", "TINYINT(1) NOT NULL DEFAULT 1", "INTEGER NOT NULL DEFAULT 1"),
 ]
 
 MYSQL_SCHEMA = [
