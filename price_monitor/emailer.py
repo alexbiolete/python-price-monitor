@@ -29,6 +29,7 @@ RISK_STYLE = {
     "high": ("#fee2e2", "#991b1b", "Likely scam"),
 }
 SHOWN_RISK = tuple(RISK_STYLE)
+NOTE_INK = "#3f3f46"  # the "worth considering" box: grey, darker than MUTED to read on SOFT
 # After the hidden preview text: blank characters, so inbox previews stop there instead of running
 # on into the email's first visible words (the title, "PRICE MONITOR")
 PREVIEW_STOP = "&#847;&zwnj;&nbsp;" * 90
@@ -96,13 +97,14 @@ def _risk_html(item):
 
 
 def _notes_html(item):
-    """Worth knowing, not a warning: one grey line, when the listing has no risk level (a level's
-    reasons include the notes)"""
+    """Worth considering, not a warning: a grey box like the risk levels' ones (the dashboard's "Worth
+    considering"), when the listing has no risk level (a level's reasons include the notes)"""
     notes = item.get("risk_notes") or []
     if not notes or (item.get("risk_level") in SHOWN_RISK and item.get("risk_reasons")):
         return ""
     text = "; ".join(notes)
-    return f'<div style="margin-top:4px;color:{MUTED};font-size:12px;line-height:1.45">ⓘ {esc(text[0].upper() + text[1:])}</div>'
+    return (f'<div style="margin-top:6px;padding:6px 10px;border-radius:10px;background:{SOFT};color:{NOTE_INK};font-size:12px;line-height:1.45">'
+            f'<b>ⓘ Worth considering:</b> {esc(text)}</div>')
 
 
 def _detail_html(item):
@@ -117,7 +119,7 @@ def _risk_text(item):
     if item.get("risk_level") in SHOWN_RISK and item.get("risk_reasons"):
         return f"\n      ⚠ {RISK_STYLE[item['risk_level']][2]}: {'; '.join(item['risk_reasons'])}"
     if item.get("risk_notes"):
-        return f"\n      ⓘ {'; '.join(item['risk_notes'])}"
+        return f"\n      ⓘ Worth considering: {'; '.join(item['risk_notes'])}"
     return ""
 
 
