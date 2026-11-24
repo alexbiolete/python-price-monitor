@@ -23,7 +23,7 @@ SOFT = "#f4f4f5"
 GOOD = "#15803d"
 # The risk levels: yellow, orange, red (background, text, label)
 RISK_STYLE = {
-    "low": ("#fef9c3", "#854d0e", "Warning sign"),
+    "low": ("#fef9c3", "#854d0e", "Slight risk"),
     "medium": ("#ffedd5", "#9a3412", "Possible scam"),
     "high": ("#fee2e2", "#991b1b", "Likely scam"),
 }

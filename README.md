@@ -88,7 +88,7 @@ After that, each run reports listings it hasn't seen and drops of at least
 
 Every listing gets a risk level (`low`, `medium`, `high`) from warning signs
 ([`risk.py`](price_monitor/risk.py)). The email shows each with its reasons, in yellow
-(*"Warning sign"*), orange (*"Possible scam"*) or red, e.g. *"⚠ Likely scam: seller account
+(*"Slight risk"*), orange (*"Possible scam"*) or red, e.g. *"⚠ Likely scam: seller account
 3 days old; only one photo"*.
 Nothing is hidden: a flag means "look closer, and pay only through the platform".
 
