@@ -22,7 +22,7 @@ from datetime import timedelta
 
 from .db import from_db_time, json_list, json_object, to_db_time, utcnow
 from . import clean, rates, risk
-from .emailer import fmt_price, render_digest, send_email
+from .emailer import by_product, fmt_price, render_digest, send_email
 from .providers import PROVIDERS, get_provider_class
 from .providers.base import ProviderError, SearchSpec
 
@@ -389,11 +389,12 @@ def _tick(db, platforms, search_ids):
 
     if reports:
         to = settings["email_to"] or os.getenv("EMAIL_TO")
-        subject, html_body, text_body = render_digest(reports, os.getenv("DASHBOARD_URL"))
-        try:
-            send_email(subject, html_body, text_body, to)
-        except Exception:
-            log.exception("Failed to send the email")
+        for product, group in by_product(reports):  # one email (and conversation) per product
+            subject, html_body, text_body = render_digest(group, os.getenv("DASHBOARD_URL"), product)
+            try:
+                send_email(subject, html_body, text_body, to)
+            except Exception:
+                log.exception("Failed to send the email for %s", product)
     elif due:
         log.info("Nothing to report")
     return len(due)

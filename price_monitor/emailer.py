@@ -126,14 +126,24 @@ def _section(title, rows):
             f'<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:4px;border-bottom:1px solid {LINE}">{"".join(rows)}</table>')
 
 
-def render_digest(reports, dashboard_url=None):
-    """reports: [{"search": {...}, "new": [...], "drops": [...]}] -> (subject, html, text)"""
+def by_product(reports):
+    """The reports grouped by product (the search's name: one search per product per platform), in
+    their order: [(product, reports)], one email each"""
+    groups = {}
+    for r in reports:
+        groups.setdefault(r["search"]["name"], []).append(r)
+    return list(groups.items())
+
+
+def render_digest(reports, dashboard_url=None, product=None):
+    """reports: [{"search": {...}, "new": [...], "drops": [...]}], one product's -> (subject, html, text)"""
     n_new = sum(len(r["new"]) for r in reports)
     n_drops = sum(len(r["drops"]) for r in reports)
-    names = [r["search"]["name"] for r in reports]
+    product = product or reports[0]["search"]["name"]
     title = summary(n_new, n_drops)
     title = title[0].upper() + title[1:]
-    intro = ("From " + ", ".join(names)) if len(names) <= 3 else f"From {len(names)} searches"
+    platforms = list(dict.fromkeys(r["search"]["platform_label"] for r in reports))
+    intro = "On " + ", ".join(platforms)
     flagged = sum(1 for r in reports for x in r["new"] + r["drops"] if x.get("risk_level") in SHOWN_RISK)
     if flagged:
         intro += f" · {flagged} with warning signs"
@@ -144,9 +154,9 @@ def render_digest(reports, dashboard_url=None):
     # the label; unset: the machine's name
     environment = setting("ENVIRONMENT", socket.gethostname().split(".")[0])
     footer = setting("EMAIL_FOOTER", "A notification from your price monitor.")
-    # The same subject every time, so mail apps keep the digests in one conversation (they group by
-    # subject); what's new is in the heading and leads the inbox preview
-    subject = setting("EMAIL_SUBJECT", "Price monitor updates")
+    # The same subject every time for a product, so mail apps keep its emails in one conversation (by
+    # the subject, and the reply headers send_email adds for it); what's new leads the inbox preview
+    subject = setting("EMAIL_SUBJECT", "New listings for {product}").replace("{product}", product)
     preview = f"{title} · {intro}"
 
     body, text = [], [title, "", intro]

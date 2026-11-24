@@ -23,7 +23,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from .db import Db, to_db_time, utcnow
-from .emailer import render_digest, send_email
+from .emailer import by_product, render_digest, send_email
 from .providers import PROVIDERS, get_provider_class
 from .runner import allowed_platforms, env_number, tick, to_ron
 
@@ -121,9 +121,10 @@ def test_email(db):
             reports.append({"search": {**s, "platform_label": label}, "new": items[1:], "drops": [drop]})
     if not reports:
         raise SystemExit("No stored listings yet; run a check first")
-    subject, html_body, text_body = render_digest(reports, os.getenv("DASHBOARD_URL"))
     settings = db.one("SELECT email_to FROM settings WHERE id = 1")
-    send_email("[TEST] " + subject, html_body, text_body, settings["email_to"] or os.getenv("EMAIL_TO"))
+    for product, group in by_product(reports):  # one email per product, as the real ones
+        subject, html_body, text_body = render_digest(group, os.getenv("DASHBOARD_URL"), product)
+        send_email("[TEST] " + subject, html_body, text_body, settings["email_to"] or os.getenv("EMAIL_TO"))
 
 
 def option(argv, name):
