@@ -46,7 +46,8 @@ ADDED_COLUMNS = [
     ("settings", "exchange_rates_at", "DATETIME NULL", "TEXT"),
     ("settings", "prices_in_ron", "TINYINT(1) NOT NULL DEFAULT 1", "INTEGER NOT NULL DEFAULT 1"),
     # v11: listings excluded in the dashboard (left out of price estimates, listed last); the monitor
-    # never changes it, and keeps them like pinned ones (v12 renamed it from ignored_at)
+    # keeps them like pinned ones and never clears it, but sets it on a new ad with the same photo as an
+    # excluded one on its platform (a repost under a new id) (v12 renamed it from ignored_at)
     ("listings", "excluded_at", "DATETIME NULL", "TEXT"),
     # v13: the highest risk level emailed ("none", "low", "medium", "high": all); above it, listings
     # are stored and shown, not emailed

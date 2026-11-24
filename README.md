@@ -251,7 +251,9 @@ showing the flag; `NULL`: none), `price_detail` (how `price` adds up, for
 eBay's totals), and `pin_order` ✎: pinned in the dashboard, in this order (lower first; `NULL`: not
 pinned), and `excluded_at` ✎: when it was excluded in the dashboard (left out of price estimates, listed
 last; `NULL`: not excluded). The monitor never deletes a pinned or excluded listing, and
-`--resend-all` keeps them.
+`--resend-all` keeps them. An ad posted again under a new id with the same photo as an excluded ad on
+its platform (bots repost bad ads this way; Vinted keeps the photo's address) is stored excluded and
+not emailed, so excluding one copy bans the rest; un-excluding a copy in the dashboard keeps it.
 `inactive_at`: when the ad was found sold or removed (`NULL`: active), and `checked_at`: when it
 was last checked. After each run that returns results, the monitor opens the pages of up to 10 stored
 ads the run didn't show (they fell off the results or no longer match), each at most every 12 hours:
