@@ -273,7 +273,7 @@ removed (`inactive`), and when it showed up in the results again after that (`ac
 | `email_to` ✎ | Overrides `EMAIL_TO`; `NULL` to use it |
 | `run_requested_at` ✎ | "Run all now": the monitor turns it into a request on every enabled search |
 | `last_tick_at` | The last check (cron alive?) |
-| `providers` | JSON list of `{name, label, seller_info}`: the platforms the copy writing here runs, and what each shows about a seller (`reviews`, `account_age`) |
+| `providers` | JSON list of `{name, label, seller_info, runs}`: every platform module, what each shows about a seller (`reviews`, `account_age`), and whether the copy writing here runs it |
 | `exchange_rates`, `exchange_rates_at` | The rates to lei in use, JSON `{date, source: "BNR", rates: {EUR: 5.34, ...}}`, and when they were fetched |
 | `prices_in_ron` ✎ | The dashboard's table shows prices in lei (the ad's own under them); `0`: as the ad shows them. Default `1` |
 
