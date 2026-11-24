@@ -126,7 +126,7 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
     # 2. What's typical here: the median of everything in the range (for "far below the typical price")
     typical = risk.typical_price([p for _, p, in_range in candidates if in_range])
     rows = {r["external_id"]: r for r in db.all(
-        "SELECT id, external_id, price, currency, risk_signals, pin_order, inactive_at, ignored_at FROM listings"
+        "SELECT id, external_id, price, currency, risk_signals, pin_order, inactive_at, excluded_at FROM listings"
         " WHERE search_id = ?",
         (search["id"],))}
 
@@ -150,7 +150,7 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
                 if oldest and l.posted_at and l.posted_at < oldest:
                     stats["too_old"] += 1
                     skipped_old.add(l.external_id)
-                    if row is not None and row["pin_order"] is None and row["ignored_at"] is None:  # pinned, ignored stay
+                    if row is not None and row["pin_order"] is None and row["excluded_at"] is None:  # pinned, excluded stay
                         db.execute("DELETE FROM listings WHERE id = ?", (row["id"],))
                     continue
         if stored_signals is not None and provider is not None and provider.needs_enrich:

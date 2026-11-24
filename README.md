@@ -52,7 +52,7 @@ With no SMTP settings, the email is printed instead of sent.
 .venv/bin/python -m price_monitor --once           # one check, then exit (what cron runs)
 .venv/bin/python -m price_monitor --status         # the searches and their last run
 .venv/bin/python -m price_monitor --test-email     # email the latest listings, to check delivery
-.venv/bin/python -m price_monitor --resend-all     # clear the stored listings (pinned and ignored ones stay) and email everything that matches now
+.venv/bin/python -m price_monitor --resend-all     # clear the stored listings (pinned and excluded ones stay) and email everything that matches now
 ```
 
 Add `--platforms facebook` to any of these to limit it to some platforms, or
@@ -210,7 +210,7 @@ Run `--once` every 5 minutes:
 ## Database contract
 
 The monitor owns the schema. It creates the tables on start and adds new columns
-itself (`settings.schema_version`, now 11). Other apps may read everything and
+itself (`settings.schema_version`, now 12). Other apps may read everything and
 write only the columns marked ✎. All times are UTC `DATETIME`s. JSON columns hold
 text.
 
@@ -249,8 +249,8 @@ or `NULL`), `risk_score`, `risk_reasons` (JSON list of sentences) and
 mention even when the listing isn't flagged, e.g. "seller has no reviews yet"; show them when not
 showing the flag; `NULL`: none), `price_detail` (how `price` adds up, for
 eBay's totals), and `pin_order` ✎: pinned in the dashboard, in this order (lower first; `NULL`: not
-pinned), and `ignored_at` ✎: when it was ignored in the dashboard (left out of price estimates, listed
-last; `NULL`: not ignored). The monitor never deletes a pinned or ignored listing, and
+pinned), and `excluded_at` ✎: when it was excluded in the dashboard (left out of price estimates, listed
+last; `NULL`: not excluded). The monitor never deletes a pinned or excluded listing, and
 `--resend-all` keeps them.
 `inactive_at`: when the ad was found sold or removed (`NULL`: active), and `checked_at`: when it
 was last checked. After each run that returns results, the monitor opens the pages of up to 10 stored

@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 # Columns added after the first version: (table, column, MySQL type, SQLite type).
 # Added on start when missing, so an existing database upgrades itself.
@@ -45,9 +45,14 @@ ADDED_COLUMNS = [
     ("settings", "exchange_rates", "TEXT NULL", "TEXT"),
     ("settings", "exchange_rates_at", "DATETIME NULL", "TEXT"),
     ("settings", "prices_in_ron", "TINYINT(1) NOT NULL DEFAULT 1", "INTEGER NOT NULL DEFAULT 1"),
-    # v11: listings ignored in the dashboard (left out of price estimates, listed last); the monitor
-    # never changes it, and keeps them like pinned ones
-    ("listings", "ignored_at", "DATETIME NULL", "TEXT"),
+    # v11: listings excluded in the dashboard (left out of price estimates, listed last); the monitor
+    # never changes it, and keeps them like pinned ones (v12 renamed it from ignored_at)
+    ("listings", "excluded_at", "DATETIME NULL", "TEXT"),
+]
+
+# Columns renamed since: (table, old name, new name), renamed in place on start, before the above
+RENAMED_COLUMNS = [
+    ("listings", "ignored_at", "excluded_at"),  # v12
 ]
 
 MYSQL_SCHEMA = [
@@ -232,6 +237,7 @@ class Db:
             schema = SQLITE_SCHEMA
         for statement in schema:
             self.execute(statement)
+        self._rename_columns()
         self._add_missing_columns()
         version = (self.one("SELECT schema_version FROM settings WHERE id = 1") or {"schema_version": SCHEMA_VERSION})
         if version["schema_version"] < 9:
@@ -248,6 +254,11 @@ class Db:
                            " WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?", (table, column))
             return row["n"] > 0
         return any(r["name"] == column for r in self.all(f"PRAGMA table_info({table})"))
+
+    def _rename_columns(self):
+        for table, old, new in RENAMED_COLUMNS:
+            if self._has_column(table, old) and not self._has_column(table, new):
+                self.execute(f"ALTER TABLE {table} RENAME COLUMN {old} TO {new}")
 
     def _add_missing_columns(self):
         for table, column, mysql_type, sqlite_type in ADDED_COLUMNS:
