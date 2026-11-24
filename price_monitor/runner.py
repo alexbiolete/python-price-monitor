@@ -44,8 +44,8 @@ def env_number(key, default):
     return value
 
 
-def to_ron(price, currency, eur_to_ron=None):
-    """Lei, for the searches' min/max (rates.py; EUR_TO_RON and the like in .env)"""
+def to_ron(price, currency):
+    """Lei, for the searches' min/max (rates.py: BNR's rates); None without a rate for the currency"""
     return rates.to_ron(price, currency)
 
 
@@ -82,7 +82,7 @@ SELLER_KEYS = ("seller_reviews", "seller_rating", "seller_negative_reviews")
 SKIP_MEMO = 1000  # old items whose page we've read, remembered per search so it isn't read again
 
 
-def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct, max_age_days=None,
+def process(db, search, listings, platform_label, now, drop_min_pct, max_age_days=None,
             provider=None, spec=None):
     """Store matching listings, flag possible scams; return what to report. Listings outside the
     search's price range are stored too (for the price estimate), but never reported: the
@@ -95,7 +95,8 @@ def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct,
     stamp = to_db_time(now)
     state = spec.state if spec is not None else {}
     skipped_old = set(state.get("skipped_old") or [])
-    stats = {"matching": 0, "filtered": 0, "out_of_range": 0, "no_price": 0, "too_old": 0, "pages": 0, "sellers": 0}
+    stats = {"matching": 0, "filtered": 0, "out_of_range": 0, "no_price": 0, "no_rate": 0, "too_old": 0, "pages": 0,
+             "sellers": 0}
     fmt = lambda amount: fmt_price(amount, "RON")  # noqa: E731
 
     # 1. The search's filters. The price range only decides what's reported: ads outside it are kept
@@ -113,7 +114,10 @@ def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct,
         if l.external_id in skipped_old or (oldest and l.posted_at and l.posted_at < oldest):
             stats["too_old"] += 1  # older than the age limit (ads without a date are kept)
             continue
-        price_ron = to_ron(l.price, l.currency, eur_to_ron)
+        price_ron = to_ron(l.price, l.currency)
+        if price_ron is None:
+            stats["no_rate"] += 1  # no exchange rate yet: not stored, so it's new once there is one
+            continue
         title = l.title.lower()
         if (includes and not any(k in title for k in includes)) or any(k in title for k in excludes):
             stats["filtered"] += 1
@@ -209,7 +213,9 @@ def process(db, search, listings, platform_label, now, eur_to_ron, drop_min_pct,
     # Stored before price_ron existed (v8) and not in this run's results: worked out from their price
     for r in db.all("SELECT id, price, currency FROM listings WHERE search_id = ? AND price_ron IS NULL",
                     (search["id"],)):
-        db.execute("UPDATE listings SET price_ron = ? WHERE id = ?", (to_ron(r["price"], r["currency"]), r["id"]))
+        price_ron = to_ron(r["price"], r["currency"])
+        if price_ron is not None:
+            db.execute("UPDATE listings SET price_ron = ? WHERE id = ?", (price_ron, r["id"]))
 
     if skipped_old:
         state["skipped_old"] = sorted(skipped_old)[-SKIP_MEMO:]
@@ -275,7 +281,6 @@ def tick(db, platforms=None, search_ids=None):
 
 
 def _tick(db, platforms, search_ids):
-    eur_to_ron = env_number("EUR_TO_RON", 4.97)
     drop_min_pct = env_number("PRICE_DROP_MIN_PCT", 3)
     now = utcnow()
     allowed = allowed_platforms(platforms)
@@ -335,7 +340,7 @@ def _tick(db, platforms, search_ids):
 
             listings = provider.search(spec)
             max_age = s.get("max_age_days") or settings.get("default_max_age_days")
-            new, drops, stats, baseline = process(db, s, listings, label, now, eur_to_ron, drop_min_pct, max_age,
+            new, drops, stats, baseline = process(db, s, listings, label, now, drop_min_pct, max_age,
                                                   provider, spec)
             state_json = json.dumps(spec.state) if spec.state else None
             result_count, match_count = len(listings), stats["matching"]
@@ -343,10 +348,11 @@ def _tick(db, platforms, search_ids):
             error = None if listings else "The platform returned no results; check the search URL and filters"
             flagged = sum(1 for x in new + drops if x["risk_level"])
             log.info("[%s] %s: %d results, %d matching, %d outside the price range (kept), %d filtered out,"
-                     " %d older than %s days, %d without price, %d item pages read, %d sellers looked up%s",
+                     " %d older than %s days, %d without price, %d without an exchange rate, %d item pages read,"
+                     " %d sellers looked up%s",
                      label, s["name"], len(listings), stats["matching"], stats["out_of_range"], stats["filtered"],
                      stats["too_old"],
-                     max_age or "∞", stats["no_price"], stats["pages"], stats["sellers"],
+                     max_age or "∞", stats["no_price"], stats["no_rate"], stats["pages"], stats["sellers"],
                      " (baseline saved, no email)" if baseline
                      else f"; {len(new)} new, {len(drops)} price drops, {flagged} flagged")
             if listings:  # a failed or empty run says nothing about the stored ads

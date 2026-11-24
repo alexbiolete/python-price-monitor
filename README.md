@@ -33,7 +33,6 @@ cp .env.example .env                        # then fill it in
 | `ENVIRONMENT` | Which copy sent the email (`production` on the server, `local` on a laptop), shown in capitals next to the label. Default: the machine's name |
 | `EMAIL_FOOTER` | The line under the email |
 | `DASHBOARD_URL` | The email's "Open in dashboard" button. Unset: no button |
-| `EUR_TO_RON`, `USD_TO_RON`, ... | A fixed rate to lei, over the live one (unset: BNR's daily rates, see below) |
 | `PRICE_DROP_MIN_PCT` | Report drops of at least this many percent (default 3) |
 | `TICK_SECONDS` | How often the local loop checks what's due (default 60) |
 | `PLATFORMS` | The platforms this copy runs, e.g. `olx,vinted` (default: all). See [Server and laptop](#server-and-laptop) |
@@ -69,8 +68,8 @@ After that, each run reports listings it hasn't seen and drops of at least
 
 - **Price:** `min_price` / `max_price` in RON. Other currencies are converted at the National Bank of
   Romania's daily rates (BNR, `curs.bnr.ro`): fetched at most every 6 hours and kept in `settings`, so
-  a failed fetch keeps the last ones (none yet: rough built-in rates); a new set also recalculates
-  every stored listing's `price_ron`. Ads outside
+  a failed fetch keeps the last ones (none yet: an ad in another currency waits for them, unstored);
+  a new set also recalculates every stored listing's `price_ron`. No rates are built in or set by hand. Ads outside
   the range are still stored (for the price estimate, [docs/price-estimate.md](docs/price-estimate.md))
   but never emailed; the dashboard shows only the ones in the range. To see the whole market,
   leave the price out of the search's link (OLX's price filter, eBay's `_udlo`/`_udhi`) and set it

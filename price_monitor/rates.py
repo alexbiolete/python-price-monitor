@@ -1,15 +1,14 @@
 """Exchange rates to RON, for the searches' min/max price (which are in lei), listings.price_ron
 and eBay's handling fee.
 
-Live: the National Bank of Romania's daily reference rates (BNR, curs.bnr.ro), fetched at most
-every REFRESH_EVERY and kept in settings (exchange_rates), so a failed fetch keeps the last ones.
-A rate in .env as <CURRENCY>_TO_RON (e.g. EUR_TO_RON=5.0) overrides the live one; without either,
-the rough DEFAULTS below.
+The National Bank of Romania's daily reference rates (BNR, curs.bnr.ro), fetched at most every
+REFRESH_EVERY and kept in settings (exchange_rates), so a failed fetch keeps the last ones. No rates
+are built in or configured: until the first fetch succeeds, a price in another currency has no
+value in lei (None).
 """
 
 import json
 import logging
-import os
 import re
 from datetime import timedelta
 
@@ -19,7 +18,6 @@ from .db import from_db_time, to_db_time
 
 log = logging.getLogger("price_monitor")
 
-DEFAULTS = {"RON": 1.0, "EUR": 4.97, "USD": 4.45, "GBP": 5.85, "PLN": 1.16, "CHF": 5.30}
 BNR_URL = "https://curs.bnr.ro/nbrfxrates.xml"
 REFRESH_EVERY = timedelta(hours=6)  # BNR publishes once a working day, around 13:00 Romanian time
 
@@ -30,20 +28,15 @@ _live = {}  # the rates in use this run (from settings), by currency
 
 
 def rate_to_ron(currency):
-    """Lei per unit of this currency, or None if unknown."""
+    """Lei per unit of this currency, or None if unknown (no rates fetched yet, or not one BNR lists)."""
     currency = (currency or "RON").upper()
-    raw = os.getenv(f"{currency}_TO_RON")
-    try:
-        if raw:
-            return float(raw)
-    except ValueError:
-        pass
-    return _live.get(currency) or DEFAULTS.get(currency)
+    return 1.0 if currency == "RON" else _live.get(currency)
 
 
 def to_ron(amount, currency):
+    """The amount in lei, or None when there's no rate for the currency."""
     rate = rate_to_ron(currency)
-    return amount * rate if rate else amount
+    return amount * rate if rate else None
 
 
 def parse_bnr(xml):
@@ -72,10 +65,9 @@ def refresh(db, now):
         if not rates:
             raise ValueError("no rates in the response")
     except Exception as e:  # the last rates stay in use
-        log.warning("Couldn't fetch BNR's exchange rates (%s); using %s", e,
-                    "the last ones" if _live else "the defaults")
-        db.execute("UPDATE settings SET exchange_rates_at = ? WHERE id = 1", (to_db_time(now),))  # retry later
-        db.commit()
+        # Tried again on the next run; meanwhile the last ones stay in use
+        log.warning("Couldn't fetch BNR's exchange rates (%s); %s", e,
+                    "using the last ones" if _live else "prices in other currencies wait until they're fetched")
         return
     _live = rates
     db.execute("UPDATE settings SET exchange_rates = ?, exchange_rates_at = ? WHERE id = 1",

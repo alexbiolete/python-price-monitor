@@ -109,13 +109,13 @@ def print_status(db):
 
 
 def test_email(db):
-    eur = env_number("EUR_TO_RON", 4.97)
     reports = []
     for s in db.all("SELECT * FROM searches ORDER BY sort_order, id"):
         cls = get_provider_class(s["platform"])
         label = cls.label if cls else s["platform"]
         rows = db.all("SELECT * FROM listings WHERE search_id = ? ORDER BY first_seen DESC LIMIT 5", (s["id"],))
-        items = [{**r, "platform_label": label, "price_ron": to_ron(r["price"], r["currency"], eur)} for r in rows]
+        items = [{**r, "platform_label": label, "price_ron": r["price_ron"] or to_ron(r["price"], r["currency"]) or r["price"]}
+                 for r in rows]
         if items:
             drop = {**items[0], "old_price": items[0]["price"] * 1.1, "drop_pct": 100 / 11}
             reports.append({"search": {**s, "platform_label": label}, "new": items[1:], "drops": [drop]})
