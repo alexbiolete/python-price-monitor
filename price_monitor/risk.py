@@ -39,7 +39,7 @@ EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+")
 PRICE_STEPS = [(0.5, 3, "half the typical price or less"), (0.65, 2, None)]
 MIN_COMPARABLES = 5
 
-LEVELS = [(4, "high"), (2, "medium"), (1, "low")]
+LEVELS = [(4, "high"), (2, "medium"), (1, "low")]  # shown yellow, orange and red
 
 
 def plain(text):
@@ -72,10 +72,11 @@ def typical_price(prices):
 
 
 def assess(signals, price_ron, typical, fmt_price):
-    """(level or None, score, reasons, notes) for a listing. Notes repeat the reasons worth a mention
-    even when the listing isn't flagged (a seller with no reviews yet); the email shows them as a
-    grey line when it doesn't show the flag."""
+    """(level or None, score, reasons, notes) for a listing. A seller with no reviews yet adds its
+    point, but alone it gives no level: it's only a note (a grey mention), shown when there's no
+    level. A level needs at least one other sign."""
     score, reasons, notes = 0, [], []
+    weak = 0  # points that alone give no level
 
     if typical:
         ratio = price_ron / typical
@@ -97,6 +98,7 @@ def assess(signals, price_ron, typical, fmt_price):
     reviews = signals.get("seller_reviews")
     if reviews == 0:
         score += 1
+        weak += 1
         reasons.append("seller has no reviews")
         notes.append("seller has no reviews yet")
     elif reviews and reviews >= 3 and signals.get("seller_rating") is not None and signals["seller_rating"] < 0.8:
@@ -121,11 +123,11 @@ def assess(signals, price_ron, typical, fmt_price):
         score += 1
         reasons.append("only one photo" if photos == 1 else "no photos")
 
-    if signals.get("unprotected") and score > 0:
+    if signals.get("unprotected") and score > weak:
         score += 1
         reasons.append("no protected payment (OLX delivery off)")
 
-    level = next((name for minimum, name in LEVELS if score >= minimum), None)
+    level = next((name for minimum, name in LEVELS if score >= minimum), None) if score > weak else None
     return level, score, reasons, notes
 
 

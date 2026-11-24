@@ -84,8 +84,9 @@ After that, each run reports listings it hasn't seen and drops of at least
 ### Possible scams
 
 Every listing gets a risk level (`low`, `medium`, `high`) from warning signs
-([`risk.py`](price_monitor/risk.py)). The email shows `medium` and `high` with
-their reasons, e.g. *"⚠ Likely scam: seller account 3 days old; only one photo"*.
+([`risk.py`](price_monitor/risk.py)). The email shows each with its reasons, in yellow
+(*"Warning sign"*), orange (*"Possible scam"*) or red, e.g. *"⚠ Likely scam: seller account
+3 days old; only one photo"*.
 Nothing is hidden: a flag means "look closer, and pay only through the platform".
 
 | Sign | Points | Where it comes from |
@@ -101,9 +102,9 @@ Nothing is hidden: a flag means "look closer, and pay only through the platform"
 1 point is `low`, 2-3 `medium`, 4 or more `high`. Only these derived facts are
 stored, never who the seller is.
 
-A seller with no reviews yet also gets a mention when the listing isn't flagged (alone it's only
-`low`, which the email doesn't show): a grey *"ⓘ Seller has no reviews yet"* under the listing
-(`risk_notes`). A flagged listing already lists it among its reasons.
+A seller with no reviews yet adds its point, but alone it gives no level: only a grey
+*"ⓘ Seller has no reviews yet"* under the listing (`risk_notes`). With any other sign it counts
+toward the level, and the level's reasons include it.
 
 Vinted shows the description and the seller's reviews only on the item's page,
 so the monitor reads it for listings it hasn't stored yet that pass the

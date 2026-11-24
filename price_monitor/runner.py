@@ -323,7 +323,7 @@ def _tick(db, platforms, search_ids):
             result_count, match_count = len(listings), stats["matching"]
             status = "ok" if listings else "empty"
             error = None if listings else "The platform returned no results; check the search URL and filters"
-            flagged = sum(1 for x in new + drops if x["risk_level"] in ("medium", "high"))
+            flagged = sum(1 for x in new + drops if x["risk_level"])
             log.info("[%s] %s: %d results, %d matching, %d outside the price range (kept), %d filtered out,"
                      " %d older than %s days, %d without price, %d item pages read%s",
                      label, s["name"], len(listings), stats["matching"], stats["out_of_range"], stats["filtered"],

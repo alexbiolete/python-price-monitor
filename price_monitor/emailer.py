@@ -21,14 +21,16 @@ MUTED = "#71717a"
 LINE = "#e4e4e7"
 SOFT = "#f4f4f5"
 GOOD = "#15803d"
-WARN_BG = "#fef3c7"
-WARN_INK = "#92400e"
-DANGER_BG = "#fee2e2"
-DANGER_INK = "#991b1b"
-SHOWN_RISK = ("medium", "high")
+# The risk levels: yellow, orange, red (background, text, label)
+RISK_STYLE = {
+    "low": ("#fef9c3", "#854d0e", "Warning sign"),
+    "medium": ("#ffedd5", "#9a3412", "Possible scam"),
+    "high": ("#fee2e2", "#991b1b", "Likely scam"),
+}
+SHOWN_RISK = tuple(RISK_STYLE)
 # After the hidden preview text: blank characters, so inbox previews stop there instead of running
 # on into the email's first visible words (the title, "PRICE MONITOR")
-PREVIEW_STOP = "&#847;&zwnj;&nbsp;" * 90  # "low" is stored and shown in the dashboard, not emailed
+PREVIEW_STOP = "&#847;&zwnj;&nbsp;" * 90
 FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
 
 
@@ -87,14 +89,14 @@ def _risk_html(item):
     level, reasons = item.get("risk_level"), item.get("risk_reasons") or []
     if level not in SHOWN_RISK or not reasons:
         return ""
-    bg, ink = (DANGER_BG, DANGER_INK) if level == "high" else (WARN_BG, WARN_INK)
-    label = "Likely scam" if level == "high" else "Possible scam"
+    bg, ink, label = RISK_STYLE[level]
     return (f'<div style="margin-top:6px;padding:6px 10px;border-radius:10px;background:{bg};color:{ink};font-size:12px;line-height:1.45">'
             f'<b>⚠ {label}:</b> {esc("; ".join(reasons))}</div>')
 
 
 def _notes_html(item):
-    """Worth knowing, not a warning: one grey line, when the flag (which has them too) isn't shown"""
+    """Worth knowing, not a warning: one grey line, when the listing has no risk level (a level's
+    reasons include the notes)"""
     notes = item.get("risk_notes") or []
     if not notes or (item.get("risk_level") in SHOWN_RISK and item.get("risk_reasons")):
         return ""
@@ -112,7 +114,7 @@ def _detail_html(item):
 
 def _risk_text(item):
     if item.get("risk_level") in SHOWN_RISK and item.get("risk_reasons"):
-        return f"\n      ⚠ {'Likely' if item['risk_level'] == 'high' else 'Possible'} scam: {'; '.join(item['risk_reasons'])}"
+        return f"\n      ⚠ {RISK_STYLE[item['risk_level']][2]}: {'; '.join(item['risk_reasons'])}"
     if item.get("risk_notes"):
         return f"\n      ⓘ {'; '.join(item['risk_notes'])}"
     return ""
@@ -133,7 +135,7 @@ def render_digest(reports, dashboard_url=None):
     intro = ("From " + ", ".join(names)) if len(names) <= 3 else f"From {len(names)} searches"
     flagged = sum(1 for r in reports for x in r["new"] + r["drops"] if x.get("risk_level") in SHOWN_RISK)
     if flagged:
-        intro += f" · {flagged} flagged as {'a possible scam' if flagged == 1 else 'possible scams'}"
+        intro += f" · {flagged} with warning signs"
     # A small label above the heading ("PRICE MONITOR"); empty: none. And an optional start for the
     # subject ("Deals: 3 new…")
     kicker = setting("EMAIL_KICKER", "Price monitor")
