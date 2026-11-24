@@ -162,8 +162,8 @@ def render_digest(reports, dashboard_url=None, product=None):
     footer = setting("EMAIL_FOOTER", "A notification from your price monitor.")
     # The same subject every time for a product, so mail apps keep its emails in one conversation (by
     # the subject, and the reply headers send_email adds for it); what's new leads the inbox preview
-    subject = (setting("EMAIL_SUBJECT", "Listing updates for {product}").replace("{product}", product) if product
-               else setting("EMAIL_SUBJECT_ALL", "Listing updates"))
+    subject = (setting("EMAIL_SUBJECT", "New listing updates for {product}").replace("{product}", product) if product
+               else setting("EMAIL_SUBJECT_ALL", "New listing updates"))
     preview = f"{title} · {intro}"
 
     body, text = [], [title, "", intro]
