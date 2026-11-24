@@ -2,6 +2,7 @@
 (apps/backend/src/common/email.ts: renderEmail) so both read as one system:
 same palette, wordmark, card, kicker/title/intro, pill buttons and footer."""
 
+import hashlib
 import html
 import socket
 import logging
@@ -10,7 +11,7 @@ import smtplib
 import ssl
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from email.utils import formataddr
+from email.utils import formataddr, formatdate, make_msgid
 
 log = logging.getLogger("price_monitor")
 
@@ -229,6 +230,14 @@ def send_email(subject, html_body, text_body, to):
     from_addr = setting("EMAIL_FROM_ADDRESS", user)
     msg["From"] = formataddr((from_name, from_addr))
     msg["To"] = to
+    msg["Date"] = formatdate(localtime=True)
+    # One conversation per subject: mail apps that group by the reply headers (Proton Mail) rather
+    # than the subject see every digest as a reply to the same first message (which needn't exist)
+    domain = (from_addr or user or "localhost").rpartition("@")[2] or "localhost"
+    thread = f"<{hashlib.sha1(subject.encode()).hexdigest()[:16]}.price-monitor@{domain}>"
+    msg["Message-ID"] = make_msgid("price-monitor", domain=domain)
+    msg["In-Reply-To"] = thread
+    msg["References"] = thread
     msg.attach(MIMEText(text_body, "plain", "utf-8"))
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
