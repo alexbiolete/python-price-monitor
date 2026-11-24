@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 # Columns added after the first version: (table, column, MySQL type, SQLite type).
 # Added on start when missing, so an existing database upgrades itself.
@@ -48,6 +48,9 @@ ADDED_COLUMNS = [
     # v11: listings excluded in the dashboard (left out of price estimates, listed last); the monitor
     # never changes it, and keeps them like pinned ones (v12 renamed it from ignored_at)
     ("listings", "excluded_at", "DATETIME NULL", "TEXT"),
+    # v13: the highest risk level emailed ("none", "low", "medium", "high": all); above it, listings
+    # are stored and shown, not emailed
+    ("settings", "email_max_risk", "VARCHAR(10) NOT NULL DEFAULT 'high'", "TEXT NOT NULL DEFAULT 'high'"),
 ]
 
 # Columns renamed since: (table, old name, new name), renamed in place on start, before the above

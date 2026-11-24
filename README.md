@@ -210,7 +210,7 @@ Run `--once` every 5 minutes:
 ## Database contract
 
 The monitor owns the schema. It creates the tables on start and adds new columns
-itself (`settings.schema_version`, now 12). Other apps may read everything and
+itself (`settings.schema_version`, now 13). Other apps may read everything and
 write only the columns marked ✎. All times are UTC `DATETIME`s. JSON columns hold
 text.
 
@@ -276,5 +276,6 @@ removed (`inactive`), and when it showed up in the results again after that (`ac
 | `providers` | JSON list of `{name, label, seller_info, runs}`: every platform module, what each shows about a seller (`reviews`, `account_age`), and whether the copy writing here runs it |
 | `exchange_rates`, `exchange_rates_at` | The rates to lei in use, JSON `{date, source: "BNR", rates: {EUR: 5.34, ...}}`, and when they were fetched |
 | `prices_in_ron` ✎ | The dashboard's table shows prices in lei (the ad's own under them); `0`: as the ad shows them. Default `1` |
+| `email_max_risk` ✎ | The highest risk level emailed: `none` (only listings without one), `low`, `medium` or `high` (all, the default). Listings above it are stored and shown, not emailed |
 
 Deleting a search deletes its listings and their history (foreign keys cascade).

@@ -219,6 +219,17 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
     return new, drops, stats, is_baseline
 
 
+# The risk levels, lowest first ("none": no level); settings.email_max_risk is the highest one emailed
+RISK_ORDER = ["none", "low", "medium", "high"]
+
+
+def emailed(item, max_risk):
+    """Whether a listing goes in the email: its risk level at most max_risk ("high", or unknown: all)"""
+    if max_risk not in RISK_ORDER:
+        return True
+    return RISK_ORDER.index(item.get("risk_level") or "none") <= RISK_ORDER.index(max_risk)
+
+
 RECHECK_EVERY = timedelta(hours=12)  # an ad a search stopped showing is re-checked at most this often
 
 
@@ -315,6 +326,7 @@ def _tick(db, platforms, search_ids):
                  f", platforms: {', '.join(sorted(allowed))}" if allowed else "")
 
     providers, last_platform, reports = {}, None, []
+    max_risk = settings.get("email_max_risk") or "high"
     for s in due:
         cls = get_provider_class(s["platform"])
         status, error, result_count, match_count, state_json = "error", None, None, None, s["provider_state"]
@@ -354,6 +366,8 @@ def _tick(db, platforms, search_ids):
                 if checked:
                     log.info("[%s] %s: re-checked %d ads it no longer shows: %d gone, %d with a new price",
                              label, s["name"], checked, gone, repriced)
+            # Only up to the risk level the settings email (the rest are stored and shown, not emailed)
+            new, drops = [x for x in new if emailed(x, max_risk)], [x for x in drops if emailed(x, max_risk)]
             if new or drops:
                 reports.append({"search": {**s, "platform_label": label}, "new": new, "drops": drops})
         except ProviderError as e:
