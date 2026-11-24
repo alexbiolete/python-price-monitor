@@ -153,7 +153,7 @@ search's error says so in the dashboard.
 ### Server and laptop
 
 Each copy runs only the platforms in its `PLATFORMS`, so nothing runs twice. The server runs
-`olx,publi24` from cron (eBay waits for API keys, Vinted is off; add `facebook` only with `FACEBOOK_COOKIES` set); a laptop has
+`olx,publi24,vinted` from cron (eBay waits for API keys; add `facebook` only with `FACEBOOK_COOKIES` set); a laptop has
 `PLATFORMS=none` and runs things only by hand, Facebook included:
 
 ```bash
