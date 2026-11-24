@@ -29,7 +29,7 @@ cp .env.example .env                        # then fill it in
 | `EMAIL_TITLE` | The title at the top of the email |
 | `EMAIL_FROM_NAME`, `EMAIL_FROM_ADDRESS` | The sender shown in the inbox. The address defaults to `SMTP_USER` |
 | `EMAIL_KICKER` | The small label above the heading (default "Price monitor"; empty: none). It stays out of the inbox preview |
-| `EMAIL_SUBJECT` | One email per product; its subject, with `{product}` filled in (default *Updates for {product}*). The same each time for a product, with reply headers to match, so each product's emails are one conversation. What's new leads the preview |
+| `EMAIL_SUBJECT` | One email per product; its subject, with `{product}` filled in (default *Listing updates for {product}*). The same each time for a product, with reply headers to match, so each product's emails are one conversation. What's new leads the preview |
 | `ENVIRONMENT` | Which copy sent the email (`production` on the server, `local` on a laptop), shown in capitals next to the label. Default: the machine's name |
 | `EMAIL_FOOTER` | The line under the email |
 | `DASHBOARD_URL` | The email's "Open in dashboard" button. Unset: no button |
