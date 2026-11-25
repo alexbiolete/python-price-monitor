@@ -161,7 +161,8 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
                 provider.enrich(l)
                 clean.listing(l)  # the item page may have added to it (e.g. the location)
         if stored_signals is not None and provider is not None and provider.needs_enrich:
-            signals = stored_signals  # read from its page before; the page isn't read again
+            # Read from its page before (the page isn't read again); its title is checked again, for new rules
+            signals = risk.with_title_phrases(stored_signals, l.title)
         else:
             signals = risk.static_signals(l, search["platform"])
             if provider is not None and provider.rates_sellers:

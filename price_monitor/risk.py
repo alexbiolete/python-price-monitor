@@ -99,6 +99,19 @@ def static_signals(listing, platform):
     return s
 
 
+def with_title_phrases(signals, title):
+    """Stored signals (read from an item page once, e.g. Vinted's) plus what the current phrase lists find
+    in the title: a kind already there stays as it was (it may have come from the description, which
+    isn't stored), a kind the title shows now is added. So new rules reach listings stored before them."""
+    s = dict(signals)
+    for key, groups in (("phrases", PHRASES), ("rush", RUSH_PHRASES), ("messaging", NOTE_PHRASES)):
+        have = list(s.get(key) or [])
+        kinds = {r.split(" (", 1)[0] for r in have}
+        have += [r for r in phrase_reasons(title, "", groups) if r.split(" (", 1)[0] not in kinds]
+        s[key] = have
+    return s
+
+
 def typical_price(prices):
     """The median of comparable prices (RON), or None when there are too few to say."""
     prices = [p for p in prices if p and p > 0]
