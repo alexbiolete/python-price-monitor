@@ -3,8 +3,8 @@
     "platform": "facebook",
     "name": "Xbox Series X",
     "query_url": "https://www.facebook.com/marketplace/bucharest/search/?query=xbox%20series%20x&minPrice=1500&maxPrice=3000&daysSinceListed=30",
-    "min_price": 1500,
-    "max_price": 3000,
+    "min_budget": 1500,
+    "max_budget": 3000,
     "include_keywords": [
       "series x",
       "seria x",
@@ -45,8 +45,8 @@
     "platform": "facebook",
     "name": "Xbox Series S",
     "query_url": "https://www.facebook.com/marketplace/bucharest/search/?query=xbox%20series%20s&minPrice=500&maxPrice=2000&daysSinceListed=30",
-    "min_price": 500,
-    "max_price": 2000,
+    "min_budget": 500,
+    "max_budget": 2000,
     "include_keywords": [
       "series s",
       "seria s",
@@ -87,8 +87,8 @@
     "platform": "facebook",
     "name": "PlayStation 5",
     "query_url": "https://www.facebook.com/marketplace/bucharest/search/?query=playstation%205&minPrice=1500&maxPrice=2500&daysSinceListed=30",
-    "min_price": 1500,
-    "max_price": 2500,
+    "min_budget": 1500,
+    "max_budget": 2500,
     "include_keywords": [
       "ps5",
       "ps 5",

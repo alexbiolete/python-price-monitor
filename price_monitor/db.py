@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 # Columns added after the first version: (table, column, MySQL type, SQLite type).
 # Added on start when missing, so an existing database upgrades itself.
@@ -37,8 +37,9 @@ ADDED_COLUMNS = [
     # v7: worth-knowing facts that aren't scam signs and add no points (risk.py), e.g. a seller with
     # no reviews yet: a JSON list of sentences, NULL when none
     ("listings", "risk_notes", "TEXT NULL", "TEXT"),
-    # v8: ads outside a search's price range are stored too (for the price estimate); price_ron is
-    # the price in lei the range compares, so readers filter on it (min_price <= price_ron <= max_price)
+    # v8: ads outside a search's budget are stored too (for the price estimate); price_ron is the price
+    # in lei the budget compares, so readers filter on it (min_budget <= price_ron <= max_budget; v15
+    # renamed them from min_price/max_price)
     ("listings", "price_ron", "DOUBLE NULL", "REAL"),
     # v10: live exchange rates (rates.py; JSON {"date", "source", "rates": {currency: lei}}) and when
     # they were last fetched; the dashboard's table shows prices in lei unless prices_in_ron is 0
@@ -54,11 +55,24 @@ ADDED_COLUMNS = [
     ("settings", "email_max_risk", "VARCHAR(10) NOT NULL DEFAULT 'high'", "TEXT NOT NULL DEFAULT 'high'"),
     # v14: one email for all products a check found something for (1), or one per product (0)
     ("settings", "merge_emails", "TINYINT(1) NOT NULL DEFAULT 1", "INTEGER NOT NULL DEFAULT 1"),
+    # v15: whether the dashboard lists a search's listings (1) or only gathers them (0: still stored, for
+    # the price estimate; emails are notify_new/notify_price_drops). And its prices, min_price/max_price:
+    # what a real one of the product can cost, broader than the budget (min_budget/max_budget, which these
+    # two names held before v15). Ads outside them (games, cases, parts) aren't stored unless
+    # store_outside_prices is 1; NULL: no bound
+    ("searches", "show_listings", "TINYINT(1) NOT NULL DEFAULT 1", "INTEGER NOT NULL DEFAULT 1"),
+    ("searches", "min_price", "DOUBLE NULL", "REAL"),
+    ("searches", "max_price", "DOUBLE NULL", "REAL"),
+    ("searches", "store_outside_prices", "TINYINT(1) NOT NULL DEFAULT 0", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 # Columns renamed since: (table, old name, new name), renamed in place on start, before the above
 RENAMED_COLUMNS = [
     ("listings", "ignored_at", "excluded_at"),  # v12
+    # v15: the range to buy in was min_price/max_price; those names are now the broader price limits
+    # (added above, after the rename)
+    ("searches", "min_price", "min_budget"),
+    ("searches", "max_price", "max_budget"),
 ]
 
 MYSQL_SCHEMA = [
@@ -67,8 +81,8 @@ MYSQL_SCHEMA = [
         platform VARCHAR(50) NOT NULL,
         name VARCHAR(200) NOT NULL,
         query_url TEXT NOT NULL,
-        min_price DOUBLE NULL,
-        max_price DOUBLE NULL,
+        min_budget DOUBLE NULL,
+        max_budget DOUBLE NULL,
         include_keywords TEXT NULL,
         exclude_keywords TEXT NULL,
         options TEXT NULL,
@@ -142,7 +156,7 @@ SQLITE_SCHEMA = [
         platform TEXT NOT NULL,
         name TEXT NOT NULL,
         query_url TEXT NOT NULL,
-        min_price REAL, max_price REAL,
+        min_budget REAL, max_budget REAL,
         include_keywords TEXT, exclude_keywords TEXT, options TEXT, provider_state TEXT,
         enabled INTEGER NOT NULL DEFAULT 1,
         interval_minutes INTEGER,

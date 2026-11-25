@@ -79,7 +79,7 @@ def _listing_row(item, price_html):
         f'<td style="padding:10px 0;border-top:1px solid {LINE};vertical-align:top">'
         f'<a href="{esc(item["url"])}" style="color:{INK};font-size:14px;font-weight:600;line-height:1.4;text-decoration:none">{esc(item["title"])}</a>'
         + (f'<div style="margin-top:2px;color:{MUTED};font-size:12px">{esc(meta)}</div>' if meta else "")
-        + _risk_html(item) + _notes_html(item)
+        + _risk_html(item) + _worth_considering_html(item)
         + f'<div style="margin-top:4px"><a href="{esc(item["url"])}" style="color:{ACCENT};font-size:12px;font-weight:600;text-decoration:none">View listing →</a></div>'
         "</td>"
         f'<td align="right" style="padding:10px 0 10px 10px;border-top:1px solid {LINE};vertical-align:top;white-space:nowrap;font-size:14px;color:{INK}">{price_html}</td>'
@@ -96,7 +96,7 @@ def _risk_html(item):
             f'<b>⚠ {label}:</b> {esc("; ".join(reasons))}</div>')
 
 
-def _notes_html(item):
+def _worth_considering_html(item):
     """Worth considering, not a warning: a grey box like the risk levels' ones (the dashboard's "Worth
     considering"), when the listing has no risk level (a level's reasons include the notes)"""
     notes = item.get("risk_notes") or []

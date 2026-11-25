@@ -56,13 +56,15 @@ def import_searches(db, path):
         if s.get("category_id"):
             options["category_id"] = s["category_id"]
         db.execute(
-            "INSERT INTO searches (platform, name, query_url, min_price, max_price, include_keywords,"
-            " exclude_keywords, options, enabled, interval_minutes, max_age_days, sort_order)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (platform, s["name"], url, s.get("min_price"), s.get("max_price"),
+            "INSERT INTO searches (platform, name, query_url, min_budget, max_budget, min_price, max_price,"
+            " store_outside_prices, include_keywords, exclude_keywords, options, enabled, show_listings,"
+            " interval_minutes, max_age_days, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (platform, s["name"], url, s.get("min_budget"), s.get("max_budget"), s.get("min_price"), s.get("max_price"),
+             1 if s.get("store_outside_prices") else 0,
              json.dumps(s.get("include_keywords") or [], ensure_ascii=False),
              json.dumps(s.get("exclude_keywords") or s.get("exclude") or [], ensure_ascii=False),
              json.dumps(options) if options else None, 1 if s.get("enabled", True) else 0,
+             1 if s.get("show_listings", True) else 0,
              s.get("interval_minutes"), s.get("max_age_days"), s.get("sort_order", 100)))
         added += 1
         log.info("Added %s (%s)", s["name"], platform)

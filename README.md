@@ -66,16 +66,20 @@ After that, each run reports listings it hasn't seen and drops of at least
 
 ### What a search filters
 
-- **Price:** `min_price` / `max_price` in RON. Other currencies are converted at the National Bank of
+- **Budget:** `min_budget` / `max_budget` in RON, the range you'd buy in. Other currencies are converted at the National Bank of
   Romania's daily rates (BNR, `curs.bnr.ro`): fetched at most every 6 hours and kept in `settings`, so
   a failed fetch keeps the last ones; a new set also recalculates every stored listing's `price_ron`.
   No real rates are built in or set by hand: without a BNR rate (before the first fetch ever, or a
   currency BNR doesn't list) a placeholder of 5 lei is used, logged, and corrected by the next fetch. Ads outside
-  the range are still stored (for the price estimate, [docs/price-estimate.md](docs/price-estimate.md))
-  but never emailed; the dashboard shows only the ones in the range. To see the whole market,
+  the budget are still stored (for the price estimate, [docs/price-estimate.md](docs/price-estimate.md))
+  but never emailed; the dashboard lists only the ones in the budget. To see the whole market,
   leave the price out of the search's link (OLX's price filter, eBay's `_udlo`/`_udhi`) and set it
-  here instead: the platform never returns what its link filters out. Widening the range later
+  here instead: the platform never returns what its link filters out. Widening the budget later
   doesn't email the ads already stored.
+- **Prices:** `min_price` / `max_price` in RON, broader than the budget: what a real one of the
+  product can cost. Ads outside them (games, controllers, cases at 100 lei; bundles far above) aren't
+  stored, so they stay out of the price estimate too, unless `store_outside_prices` is 1 (default 0).
+  `NULL`: no bound. (Before v15, `min_price`/`max_price` were the budget; the upgrade renames them.)
 - **Must contain** (`include_keywords`): the title has to contain at least one of
   these. Useful on Vinted, whose search also returns loosely related items.
 - **Leave out** (`exclude_keywords`): titles containing any of these are skipped.
@@ -112,7 +116,7 @@ toward the level, and the level's reasons include it.
 
 OLX's seller ratings (what an ad's page shows, e.g. *"5.0 / 5, 18 ratinguri"*) come from its
 public ratings service by the seller's id, looked up once per listing (at most 40 per search per
-run, those in the price range first) and kept on it; a seller is looked up once per run. Most OLX
+run, those in the budget first) and kept on it; a seller is looked up once per run. Most OLX
 sellers have none: OLX only collects ratings after a purchase with OLX delivery.
 
 Vinted shows the description and the seller's reviews only on the item's page,
@@ -221,11 +225,14 @@ text.
 | `id`, `created_at`, `updated_at` | `updated_at` is set by whoever edits the row |
 | `platform` ✎ | A provider's `name` (`olx`, `vinted`); unknown ones fail with a clear `last_error` |
 | `name` ✎, `query_url` ✎ | What it's called; the results page to watch |
-| `min_price` ✎, `max_price` ✎ | RON, `NULL` for no bound |
+| `min_budget` ✎, `max_budget` ✎ | The range to buy in (emailed, listed); RON, `NULL` for no bound |
+| `min_price` ✎, `max_price` ✎ | What a real one costs, broader than the budget: ads outside aren't stored; RON, `NULL` for no bound |
+| `store_outside_prices` ✎ | 1: store ads outside `min_price`/`max_price` too (default 0) |
 | `include_keywords` ✎, `exclude_keywords` ✎ | JSON lists of strings |
 | `options` ✎ | JSON object of platform-specific settings |
 | `enabled` ✎, `interval_minutes` ✎, `max_age_days` ✎ | `NULL` interval or age: the defaults in `settings` |
 | `notify_new` ✎, `notify_price_drops` ✎ | What to email about |
+| `show_listings` ✎ | Whether the dashboard lists its listings (default 1); 0 still runs and stores them, for the price estimate |
 | `sort_order` ✎ | Lower first: the order searches run and appear in the email (default 100) |
 | `run_requested_at` ✎ | Set to now for "Run now": runs at the next check, even if disabled |
 | `baseline_at` ✎ | `NULL` makes the next run save a fresh baseline without an email |
@@ -236,9 +243,9 @@ Other apps may also **delete** `listings` rows (with their `price_history` and `
 Listings page does). Nothing else remembers a listing, so the monitor's next run finds it again,
 and reports it as new, if its search still matches the ad.
 
-**`listings`**: what each search found and still matches its keywords, **also outside its price
-range**: show a search's listings with `price_ron` between its `min_price` and `max_price`, to match
-the email. Unique on `(search_id, external_id)`. Its text is stored plain (HTML entities decoded,
+**`listings`**: what each search found and still matches its keywords, **also outside its
+budget**: show a search's listings with `price_ron` between its `min_budget` and `max_budget`, to
+match the email. Unique on `(search_id, external_id)`. Its text is stored plain (HTML entities decoded,
 tags, control and invisible characters removed, [`clean.py`](price_monitor/clean.py)) and its
 links are `http(s)` only (an ad without one is skipped); still escape it when showing it.
 Its columns: `search_id`, `platform`, `external_id`, `title`, `url`, `image_url`,

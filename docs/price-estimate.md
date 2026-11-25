@@ -7,9 +7,9 @@ the stored listings; nothing runs on the monitor's side.
 ## Decided
 
 - **What counts:** the stored listings of a product (the searches with its name, on every
-  platform or one picked; an ad two of them found counts once), also outside their price ranges. A command here
+  platform or one picked; an ad two of them found counts once), also outside their budgets. A command here
   (`python -m price_monitor estimate`) can come later, with the same rules.
-- **Keep every ad a search finds, also outside its price range**, with the scam flags, so the
+- **Keep every ad a search finds, also outside its budget**, with the scam flags, so the
   estimate sees the whole market. Emails and the dashboard still show only the ads inside the
   search's current range.
 - **Fair prices:** a warning level, "at most" as on the listings (all, up to possible scams, up

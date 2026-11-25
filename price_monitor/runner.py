@@ -85,21 +85,25 @@ SKIP_MEMO = 1000  # old items whose page we've read, remembered per search so it
 def process(db, search, listings, platform_label, now, drop_min_pct, max_age_days=None,
             provider=None, spec=None):
     """Store matching listings, flag possible scams; return what to report. Listings outside the
-    search's price range are stored too (for the price estimate), but never reported: the
+    search's budget are stored too (for the price estimate), but never reported: the
     dashboard shows the ones whose price_ron is in the range."""
     is_baseline = search["baseline_at"] is None
     oldest = now - timedelta(days=max_age_days) if max_age_days else None
     includes = [k.lower() for k in json_list(search["include_keywords"]) if k.strip()]
     excludes = [k.lower() for k in json_list(search["exclude_keywords"]) if k.strip()]
-    lo, hi = search["min_price"], search["max_price"]
+    lo, hi = search["min_budget"], search["max_budget"]
+    # Its prices: outside them it's not the product (a game, a case, a part), so it isn't stored, unless
+    # the search stores those too
+    min_price, max_price = search.get("min_price"), search.get("max_price")
+    skip_outside_prices = not search.get("store_outside_prices")
     stamp = to_db_time(now)
     state = spec.state if spec is not None else {}
     skipped_old = set(state.get("skipped_old") or [])
-    stats = {"matching": 0, "filtered": 0, "out_of_range": 0, "no_price": 0, "too_old": 0, "pages": 0, "sellers": 0,
-             "banned": 0}
+    stats = {"matching": 0, "filtered": 0, "outside_budget": 0, "no_price": 0, "too_old": 0, "pages": 0, "sellers": 0,
+             "same_photo": 0, "outside_prices": 0}
     fmt = lambda amount: fmt_price(amount, "RON")  # noqa: E731
 
-    # 1. The search's filters. The price range only decides what's reported: ads outside it are kept
+    # 1. The search's filters. The budget only decides what's reported: ads outside it are kept
     candidates, seen = [], set()
     for l in listings:
         if l.price is None or not l.currency:
@@ -119,27 +123,31 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
         if (includes and not any(k in title for k in includes)) or any(k in title for k in excludes):
             stats["filtered"] += 1
             continue
-        in_range = (lo is None or price_ron >= lo) and (hi is None or price_ron <= hi)
-        candidates.append((l, price_ron, in_range))
+        if skip_outside_prices and ((min_price is not None and price_ron < min_price)
+                                    or (max_price is not None and price_ron > max_price)):
+            stats["outside_prices"] += 1
+            continue
+        in_budget = (lo is None or price_ron >= lo) and (hi is None or price_ron <= hi)
+        candidates.append((l, price_ron, in_budget))
     # In the range first, so they get the item pages a run may read (max_enrich)
     candidates.sort(key=lambda c: not c[2])
 
     # 2. What's typical here: the median of everything in the range (for "far below the typical price")
-    typical = risk.typical_price([p for _, p, in_range in candidates if in_range])
+    typical = risk.typical_price([p for _, p, in_budget in candidates if in_budget])
     rows = {r["external_id"]: r for r in db.all(
         "SELECT id, external_id, price, currency, risk_signals, pin_order, inactive_at, excluded_at FROM listings"
         " WHERE search_id = ?",
         (search["id"],))}
     # The photos of ads excluded in the dashboard, on this platform: an ad posted again under a new id
     # with the same photo (a bot reposting a bad ad, Vinted keeps the photo's address) is excluded too
-    banned_photos = {r["image_url"] for r in db.all(
+    excluded_photos = {r["image_url"] for r in db.all(
         "SELECT DISTINCT image_url FROM listings WHERE platform = ? AND excluded_at IS NOT NULL"
         " AND image_url IS NOT NULL", (search["platform"],))}
 
     new, drops = [], []
     budget = provider.max_enrich if provider is not None and provider.needs_enrich else 0
     seller_budget = provider.max_seller_lookups if provider is not None and provider.rates_sellers else 0
-    for l, price_ron, in_range in candidates:
+    for l, price_ron, in_budget in candidates:
         row = rows.get(l.external_id)
         stored_signals = json_object(row["risk_signals"]) if row and row["risk_signals"] else None
 
@@ -173,7 +181,7 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
                     stats["sellers"] += 1
                     signals.update(provider.seller_signals(l) or {})
         level, score, reasons, notes = risk.assess(signals, price_ron, typical, fmt)
-        stats["matching" if in_range else "out_of_range"] += 1
+        stats["matching" if in_budget else "outside_budget"] += 1
         item = {"title": l.title, "url": l.url, "image_url": l.image_url, "location": l.location,
                 "price": l.price, "currency": l.currency, "price_ron": price_ron,
                 "platform_label": platform_label, "risk_level": level, "risk_reasons": reasons,
@@ -182,7 +190,7 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
                        json.dumps(notes, ensure_ascii=False) if notes else None)
 
         if row is None:
-            banned = bool(l.image_url) and l.image_url in banned_photos
+            same_photo = bool(l.image_url) and l.image_url in excluded_photos
             cur = db.execute(
                 "INSERT INTO listings (search_id, platform, external_id, title, url, image_url, price, currency,"
                 " location, posted_at, first_seen, last_seen, risk_level, risk_score, risk_reasons, risk_signals,"
@@ -195,10 +203,10 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
             if signals.get("uploaded_at"):  # its page shows it reposted since it was posted
                 db.execute("INSERT INTO status_history (listing_id, status, seen_at) VALUES (?, 'reposted', ?)",
                            (cur.lastrowid, to_db_time(datetime.fromisoformat(signals["uploaded_at"]))))
-            if banned:  # stored excluded, never emailed
-                stats["banned"] += 1
+            if same_photo:  # stored excluded, never emailed
+                stats["same_photo"] += 1
                 db.execute("UPDATE listings SET excluded_at = ? WHERE id = ?", (stamp, cur.lastrowid))
-            elif in_range and not is_baseline and search["notify_new"]:
+            elif in_budget and not is_baseline and search["notify_new"]:
                 new.append(item)
             continue
 
@@ -210,7 +218,7 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
                        (row["id"], l.price, l.currency, stamp))
             if l.currency == row["currency"] and row["price"] > 0:
                 drop_pct = (row["price"] - l.price) / row["price"] * 100
-                if in_range and drop_pct >= drop_min_pct and not is_baseline and search["notify_price_drops"]:
+                if in_budget and drop_pct >= drop_min_pct and not is_baseline and search["notify_price_drops"]:
                     drops.append({**item, "old_price": row["price"], "drop_pct": drop_pct})
         db.execute(
             "UPDATE listings SET title = ?, url = ?, image_url = ?, price = ?, currency = ?,"
@@ -386,12 +394,12 @@ def _tick(db, platforms, search_ids):
             status = "ok" if listings else "empty"
             error = None if listings else "The platform returned no results; check the search URL and filters"
             flagged = sum(1 for x in new + drops if x["risk_level"])
-            log.info("[%s] %s: %d results, %d matching, %d outside the price range (kept), %d filtered out,"
-                     " %d older than %s days, %d without price, %d item pages read, %d sellers looked up,"
+            log.info("[%s] %s: %d results, %d matching, %d outside the budget (kept), %d filtered out,"
+                     " %d outside its prices (not stored), %d older than %s days, %d without price, %d item pages read, %d sellers looked up,"
                      " %d excluded (same photo as an excluded ad)%s",
-                     label, s["name"], len(listings), stats["matching"], stats["out_of_range"], stats["filtered"],
-                     stats["too_old"],
-                     max_age or "∞", stats["no_price"], stats["pages"], stats["sellers"], stats["banned"],
+                     label, s["name"], len(listings), stats["matching"], stats["outside_budget"], stats["filtered"],
+                     stats["outside_prices"], stats["too_old"],
+                     max_age or "∞", stats["no_price"], stats["pages"], stats["sellers"], stats["same_photo"],
                      " (baseline saved, no email)" if baseline
                      else f"; {len(new)} new, {len(drops)} price drops, {flagged} flagged")
             if listings:  # a failed or empty run says nothing about the stored ads
