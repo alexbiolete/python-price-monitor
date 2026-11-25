@@ -81,6 +81,23 @@ NOTE_PHRASES = {
 # Before, a messaging app was a scored phrase of this kind; stored signals may still carry it
 OLD_MESSAGING_REASON = "wants to talk on WhatsApp or Telegram"
 
+# Whether the price is open to an offer, for the dashboard's negotiation chance (no risk points): the seller
+# says so, or says it's fixed. Same matching.
+NEGOTIABLE_PHRASES = {
+    "says the price is negotiable": [
+        "negociabil", "negociabila", "negociez", "se negociaza", "pret negociabil", "accept oferte", "astept oferte",
+        "ofertati", "pret discutabil", "discutabil", "negotiable", "open to offers", "make an offer", "or best offer",
+        "do negocjacji", "do negocjacji", "cena do negocjacji", "συζητησιμη",
+    ],
+}
+FIXED_PRICE_PHRASES = {
+    "says the price is fixed": [
+        "pret fix", "pret fixx", "pretul este fix", "pret ferm", "fara negociere", "fara negocieri", "nu negociez",
+        "nu se negociaza", "nenegociabil", "non negociabil", "firm price", "price is firm", "no offers",
+        "cena stala", "cena stała", "δεν συζητιεται",
+    ],
+}
+
 # Pushing for a quick sale ("urgent"): 2 points, a possible scam on its own. Same matching.
 RUSH_PHRASES = {
     "pushes for a quick sale": [
@@ -124,6 +141,10 @@ def static_signals(listing, platform):
     s["rush"] = phrase_reasons(listing.title, description, RUSH_PHRASES)
     s["messaging"] = phrase_reasons(listing.title, description, NOTE_PHRASES)
     s["meets"] = bool(phrase_reasons(listing.title, description, MEET_PHRASES))
+    s["negotiable"] = phrase_reasons(listing.title, description, NEGOTIABLE_PHRASES)
+    s["fixed_price"] = phrase_reasons(listing.title, description, FIXED_PRICE_PHRASES)
+    if s["fixed_price"]:
+        s["negotiable"] = []  # "nu negociez" also holds "negociez": saying it's fixed wins
     return s
 
 
@@ -133,11 +154,14 @@ def with_title_phrases(signals, title):
     isn't stored), a kind the title shows now is added. So new rules reach listings stored before them."""
     s = dict(signals)
     s["meets"] = bool(s.get("meets")) or bool(phrase_reasons(title, "", MEET_PHRASES))
-    for key, groups in (("phrases", PHRASES), ("rush", RUSH_PHRASES), ("messaging", NOTE_PHRASES)):
+    for key, groups in (("phrases", PHRASES), ("rush", RUSH_PHRASES), ("messaging", NOTE_PHRASES),
+                        ("negotiable", NEGOTIABLE_PHRASES), ("fixed_price", FIXED_PRICE_PHRASES)):
         have = list(s.get(key) or [])
         kinds = {r.split(" (", 1)[0] for r in have}
         have += [r for r in phrase_reasons(title, "", groups) if r.split(" (", 1)[0] not in kinds]
         s[key] = have
+    if s.get("fixed_price"):
+        s["negotiable"] = []
     return s
 
 
