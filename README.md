@@ -4,11 +4,15 @@ Watches searches on second-hand platforms (OLX, Publi24, eBay, Vinted and Facebo
 one digest when a search finds **new listings** or a listing's **price drops**,
 with **possible scams flagged** and the reasons spelled out.
 
+- **It works on its own.** It keeps its data in a local SQLite file (or MySQL), creates and upgrades
+  its tables itself, and is driven from the command line: add searches from a JSON file, run them,
+  and read the results in your inbox. See [Running without the dashboard](#running-without-the-dashboard).
+- **A dashboard is optional.** Searches, settings and listings live in the database, so another app
+  can manage and browse them. Here, that's the codename-dojo dashboard's Price monitor page; it adds
+  editing, a listings table with filters, pins and a price estimate. See
+  [Database contract](#database-contract) for what such an app may read and write.
 - Each platform is a small module in [`price_monitor/providers/`](price_monitor/providers/).
   Everything else (filtering, change detection, storage, email) is shared.
-- Searches, intervals and the on/off switch live in the database, so another
-  app can manage them. Here, that's the codename-dojo dashboard's Price monitor
-  page. See [Database contract](#database-contract).
 - Runs from cron on the server (one check every 5 minutes, and each search's
   own interval decides whether it runs), or as a loop on your computer.
 
@@ -36,7 +40,14 @@ cp .env.example .env                        # then fill it in
 | `PRICE_DROP_MIN_PCT` | Report drops of at least this many percent (default 3) |
 | `TICK_SECONDS` | How often the local loop checks what's due (default 60) |
 | `PLATFORMS` | The platforms this copy runs, e.g. `olx,vinted` (default: all). See [Server and laptop](#server-and-laptop) |
-| `MYSQL_*` | Use MySQL instead of the local `price_monitor.db` SQLite file |
+| `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE` | Use MySQL instead of the local `price_monitor.db` SQLite file (set `MYSQL_DATABASE` to switch) |
+| `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `EBAY_SHIP_TO`, `IMPORT_VAT_PCT`, `IMPORT_FEE_RON` | eBay only: its API keys and how a total delivered price is worked out. See [Platforms](#platforms) |
+| `FACEBOOK_COOKIES`, `FACEBOOK_USER_AGENT` | Facebook Marketplace only: a logged-in session, for a server. See [Platforms](#platforms) |
+| `CRON_SCHEDULE` | Server only, read by `deploy.sh`: how often cron wakes the monitor (default every 5 minutes) |
+
+[`.env.example`](.env.example) lists them all with examples. On the server, `deploy.sh` builds the
+`.env` from your local `.env` plus `.env.production` (the server-only keys: MySQL, cron, and any
+you want different there).
 
 **Gmail:** use an [App Password](https://myaccount.google.com/apppasswords)
 (it requires 2-step verification), not your normal password, with
@@ -59,6 +70,49 @@ Add `--platforms facebook` to any of these to limit it to some platforms, or
 `--search 3,4` to run chosen searches now (ids from `--status`).
 
 Searches run, and appear in the email, in their `sort_order` (lower first).
+
+### The searches file
+
+`--import` adds the searches in a JSON list ([`searches.example.json`](searches.example.json) is a
+full one). A search already in the database (same `platform` and `name`) is skipped, so importing
+again never duplicates or overwrites anything. Each search:
+
+| Field | |
+|---|---|
+| `name` | Required. What it's called, also the product it belongs to: searches with the same name on different platforms are one product (one email section, one price estimate) |
+| `platform` | `olx` (default), `vinted`, `publi24`, `ebay` or `facebook` |
+| `query_url` | Required. The platform's results page with your filters set; see [Platforms](#platforms) |
+| `min_budget`, `max_budget` | What you'd pay, in lei: only these are emailed (and listed in a dashboard) |
+| `min_price`, `max_price` | What a real one costs, broader than the budget: anything outside isn't stored (games, parts) |
+| `store_outside_prices` | `true` to store ads outside the prices too (default `false`) |
+| `include_keywords`, `exclude_keywords` | Must contain one of / leave out any of, matched in the title, lowercase |
+| `options` | Platform settings, e.g. `{"category_id": 1882}` for OLX |
+| `enabled` | Default `true`. Off: it doesn't run |
+| `notify_new`, `notify_price_drops` | Email new listings / price drops, default `true` both |
+| `show_listings` | For a dashboard: list its listings (default `true`) or only gather them |
+| `interval_minutes`, `max_age_days` | Default: `settings.default_interval_minutes` (10) and `default_max_age_days` (30) |
+| `sort_order` | Lower first (default 100) |
+
+All prices are in lei; ads in other currencies are converted (see [What a search filters](#what-a-search-filters)).
+
+### Running without the dashboard
+
+Everything above works with no dashboard: import searches, schedule `--once` (see
+[Scheduling elsewhere](#scheduling-elsewhere)) or run the loop, and the emails are the results.
+`--status` shows each search's id, whether it's on, and its last run.
+
+To change a search after importing it, edit its row: the columns are in the
+[Database contract](#database-contract). With the default SQLite file (`price_monitor.db`, always in the
+project folder), from that folder:
+
+```bash
+sqlite3 price_monitor.db "UPDATE searches SET max_budget = 2500 WHERE id = 3"
+sqlite3 price_monitor.db "UPDATE searches SET enabled = 0 WHERE name = 'PlayStation 5'"
+sqlite3 price_monitor.db "UPDATE listings SET excluded_at = CURRENT_TIMESTAMP WHERE id = 42"   # exclude an ad
+sqlite3 price_monitor.db "SELECT id, title, price_ron, url FROM listings WHERE search_id = 3 ORDER BY first_seen DESC LIMIT 20"
+```
+
+(With MySQL, the same statements in its client.) Changes apply on the next run; no restart needed.
 
 A search's **first run** saves what's there as a baseline, without an email.
 After that, each run reports listings it hasn't seen and drops of at least
@@ -124,6 +178,7 @@ Vinted shows the description and the seller's reviews only on the item's page,
 so the monitor reads it for listings it hasn't stored yet that pass the
 filters (at most 15 per search per run, 1.5 s apart). That page also says when
 the item was uploaded, which tightens the age check.
+
 ## Platforms
 
 | `platform` | Link to paste as `query_url` | Notes |
@@ -145,7 +200,7 @@ delivered** to `EBAY_SHIP_TO` (default `RO`): price + the cheapest shipping ther
 shipped from outside the EU, customs duty (`{"duty_pct": N}` in `options`, 0 for consoles), import
 VAT on all of that (`IMPORT_VAT_PCT`, 21) and a courier's fee (`IMPORT_FEE_RON`, 0). The breakdown
 ("320 € + 45 € shipping + 77 € import VAT (21%)") is in `price_detail`, under the price in the email
-and the dashboard. Min/max compare that total in lei, at BNR's rates.
+and the dashboard. The budget and prices compare that total in lei, at BNR's rates.
 
 `facebook`: a Marketplace search with your filters set
 (`https://www.facebook.com/marketplace/bucharest/search/?query=...&minPrice=...&daysSinceListed=30`).
@@ -215,7 +270,7 @@ Run `--once` every 5 minutes:
 ## Database contract
 
 The monitor owns the schema. It creates the tables on start and adds new columns
-itself (`settings.schema_version`, now 14). Other apps may read everything and
+itself (`settings.schema_version`, now 15). Other apps may read everything and
 write only the columns marked ✎. All times are UTC `DATETIME`s. JSON columns hold
 text.
 
