@@ -190,6 +190,11 @@ can't be "only ships". Only these derived facts are stored, never who the seller
 Telegram, Viber, also "wapp" and wa.me / t.me links), and the same photo on other ads of the platform (a
 copied photo, or the ad posted again; a photo on more than 10 ads is a placeholder and doesn't count).
 
+The monitor also notes, without points, whether an ad says its price is **negotiable** ("negociabil",
+"accept oferte", "preț discutabil") or **fixed** ("preț fix", "nu negociez"; fixed wins), in
+`risk_signals.negotiable` / `fixed_price`. The dashboard uses them, with the price history, for its
+negotiation chance and deal score.
+
 A listing marked suspicious in the dashboard (`listings.marked_suspicious_at`) shows as a likely scam whatever its
 signs, and its price drops aren't emailed.
 
