@@ -33,10 +33,20 @@ def _mix(a, b, share):
     return "#" + "".join(f"{round(x * share + y * (1 - share)):02x}" for x, y in zip(pa, pb))
 
 
-# The good signs' box (background, text), by the risk level: full green with no warning signs, then mixed
-# towards the notes' grey box (70%, 45%, 20% green), nearly grey on a likely scam
-GOOD_SHADES = {level: (_mix("#dcfce7", SOFT, share), _mix(GOOD, NOTE_INK, share))
-               for level, share in ((None, 1), ("low", 0.7), ("medium", 0.45), ("high", 0.2))}
+# The good signs' box (background, text): their level sets the hue (very good: green; good: 70% green;
+# some: 40% green, the rest a yellow, so a yellowish green), the risk level how grey it gets (mixed towards
+# the notes' grey box: none 100% kept, slight 70%, possible 45%, likely 20%)
+GOOD_GREEN = {"high": 1, "medium": 0.7, "low": 0.4}
+GOOD_KEEP = {None: 1, "low": 0.7, "medium": 0.45, "high": 0.2}
+GOOD_YELLOW = ("#fef9c3", "#a16207")  # the yellow end (background, text)
+
+
+def good_shades(good_level, risk_level):
+    """(background, text) for a good-signs box"""
+    green, keep = GOOD_GREEN.get(good_level, 0.7), GOOD_KEEP.get(risk_level, 1)
+    background = _mix(_mix("#dcfce7", GOOD_YELLOW[0], green), SOFT, keep)
+    text = _mix(_mix(GOOD, GOOD_YELLOW[1], green), NOTE_INK, keep)
+    return background, text
 # The risk levels: yellow, orange, red (background, text, label)
 RISK_STYLE = {
     "low": ("#fef9c3", "#854d0e", "Slight risk"),
@@ -129,7 +139,7 @@ def _good_html(item):
     green box between the notes and the warning signs (the dashboard's "Good signs"); its green fades as
     the risk level rises"""
     good = item.get("risk_good") or []
-    background, ink = GOOD_SHADES.get(item.get("risk_level"), GOOD_SHADES[None])
+    background, ink = good_shades(item.get("good_level"), item.get("risk_level"))
     return _box(f"✓ {GOOD_LABELS.get(item.get('good_level'), 'Good signs')}", good, background, ink) if good else ""
 
 
