@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 19
+SCHEMA_VERSION = 20
 
 # Columns added after the first version: (table, column, MySQL type, SQLite type).
 # Added on start when missing, so an existing database upgrades itself.
@@ -76,6 +76,9 @@ ADDED_COLUMNS = [
     # v19: the good signs' level ("low": some, "medium": good, "high": very good; NULL: none) and points
     ("listings", "good_level", "VARCHAR(10) NULL", "TEXT"),
     ("listings", "good_score", "INT NULL", "INTEGER"),
+    # v20: the ad's description, plain text with its line breaks (clean.lines; NULL: the platform gives none,
+    # or it was stored before v20), for the dashboard and for --rescore's phrase rules
+    ("listings", "description", "TEXT NULL", "TEXT"),
 ]
 
 # Columns renamed since: (table, old name, new name), renamed in place on start, before the above

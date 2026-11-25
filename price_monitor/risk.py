@@ -189,16 +189,25 @@ def _without_markup(reason):
     return re.sub(r'\s+(…?"\))$', r"\1", reason.replace('(" ', '("'))
 
 
-def with_title_phrases(signals, title):
-    """Stored signals (read from an item page once, e.g. Vinted's) plus what the current phrase lists find
-    in the title: a kind already there stays as it was (it may have come from the description, which
-    isn't stored), a kind the title shows now is added. So new rules reach listings stored before them."""
+def with_current_phrases(signals, title, description=None):
+    """Stored signals plus what the current phrase lists find. With the ad's stored description (v20),
+    every phrase kind is worked out again from the title and description. Without it (stored before
+    v20, or read from an item page once, e.g. Vinted's), a kind already there stays as it was (it may
+    have come from the description) and a kind the title shows now is added. So new rules reach
+    listings stored before them."""
     s = dict(signals)
-    # Offers to meet: stored as the phrase found (a list; before, a bool), else what the title shows
-    meets = s.get("meets")
-    s["meets"] = [_without_markup(r) for r in meets] if isinstance(meets, list) and meets else phrase_reasons(title, "", MEET_PHRASES) or bool(meets)
+    if description:
+        s["meets"] = phrase_reasons(title, description, MEET_PHRASES)
+    else:
+        # Offers to meet: stored as the phrase found (a list; before, a bool), else what the title shows
+        meets = s.get("meets")
+        s["meets"] = [_without_markup(r) for r in meets] if isinstance(meets, list) and meets else \
+            phrase_reasons(title, "", MEET_PHRASES) or bool(meets)
     for key, groups in (("phrases", PHRASES), ("rush", RUSH_PHRASES), ("messaging", NOTE_PHRASES),
                         ("negotiable", NEGOTIABLE_PHRASES), ("fixed_price", FIXED_PRICE_PHRASES)):
+        if description:
+            s[key] = phrase_reasons(title, description, groups)
+            continue
         have = [_without_markup(r) for r in s.get(key) or []]
         kinds = {r.split(" (", 1)[0] for r in have}
         have += [r for r in phrase_reasons(title, "", groups) if r.split(" (", 1)[0] not in kinds]

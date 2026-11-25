@@ -82,6 +82,7 @@ SELLER_KEYS = ("seller_reviews", "seller_rating", "seller_negative_reviews")
 
 
 SAME_PHOTO_MAX = 10  # more ads than this with one photo: a placeholder image, not a copy
+DESCRIPTION_MAX = 10000  # characters of an ad's description stored
 
 
 def process(db, search, listings, platform_label, now, drop_min_pct, max_age_days=None,
@@ -137,7 +138,7 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
     # 2. What's typical here: the median of everything in the range (for "far below the typical price")
     typical = risk.typical_price([p for l, p, in_budget in candidates if in_budget and not is_old(l)])
     rows = {r["external_id"]: r for r in db.all(
-        "SELECT id, external_id, price, currency, risk_signals, pin_order, inactive_at, excluded_at, marked_suspicious_at FROM listings"
+        "SELECT id, external_id, price, currency, risk_signals, description, pin_order, inactive_at, excluded_at, marked_suspicious_at FROM listings"
         " WHERE search_id = ?",
         (search["id"],))}
     # The photos of ads excluded in the dashboard, on this platform: an ad posted again under a new id
@@ -174,7 +175,7 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
                 clean.listing(l)  # the item page may have added to it (e.g. the location)
         if stored_signals is not None and provider is not None and provider.needs_enrich:
             # Read from its page before (the page isn't read again); its title is checked again, for new rules
-            signals = risk.with_title_phrases(stored_signals, l.title)
+            signals = risk.with_current_phrases(stored_signals, l.title, row["description"])
         else:
             signals = risk.static_signals(l, search["platform"])
             if provider is not None and provider.rates_sellers:
@@ -188,6 +189,8 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
                     signals.update(provider.seller_signals(l) or {})
         others = len(photo_ads.get(l.image_url, ()) - {l.external_id}) if l.image_url else 0
         signals["same_photo_ads"] = others if others <= SAME_PHOTO_MAX else 0
+        # As read this run (the results, or the item's page); None: not read (a stored one keeps its own)
+        description = clean.lines((l.signals or {}).get("description"))[:DESCRIPTION_MAX] or None
         level, score, reasons, notes = risk.assess(signals, price_ron, typical, fmt)
         good_level, good_score, good = risk.good_signs(signals)
         old = is_old(l)  # after its page: that can show it's older than the id said
@@ -205,11 +208,11 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
             cur = db.execute(
                 "INSERT INTO listings (search_id, platform, external_id, title, url, image_url, price, currency,"
                 " location, posted_at, first_seen, last_seen, risk_level, risk_score, risk_reasons, risk_signals,"
-                " risk_notes, risk_good, good_level, good_score, price_detail, price_ron)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " risk_notes, risk_good, good_level, good_score, price_detail, price_ron, description)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (search["id"], search["platform"], l.external_id, l.title[:500], l.url, l.image_url,
                  l.price, l.currency, (l.location or None) and l.location[:200], to_db_time(l.posted_at),
-                 stamp, stamp) + risk_values + ((l.price_detail or None) and l.price_detail[:300], price_ron))
+                 stamp, stamp) + risk_values + ((l.price_detail or None) and l.price_detail[:300], price_ron, description))
             db.execute("INSERT INTO price_history (listing_id, price, currency, seen_at) VALUES (?, ?, ?, ?)",
                        (cur.lastrowid, l.price, l.currency, stamp))
             if signals.get("uploaded_at"):  # its page shows it reposted since it was posted
@@ -241,9 +244,9 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
             " location = COALESCE(?, location), posted_at = COALESCE(?, posted_at), last_seen = ?, inactive_at = NULL,"
             " risk_level = ?, risk_score = ?,"
             " risk_reasons = ?, risk_signals = ?, risk_notes = ?, risk_good = ?, good_level = ?, good_score = ?,"
-            " price_detail = ?, price_ron = ? WHERE id = ?",
+            " price_detail = ?, price_ron = ?, description = COALESCE(?, description) WHERE id = ?",
             (l.title[:500], l.url, l.image_url, l.price, l.currency, (l.location or None) and l.location[:200],
-             to_db_time(l.posted_at), stamp) + risk_values + ((l.price_detail or None) and l.price_detail[:300], price_ron, row["id"]))
+             to_db_time(l.posted_at), stamp) + risk_values + ((l.price_detail or None) and l.price_detail[:300], price_ron, description, row["id"]))
 
     # Stored before price_ron existed (v8) and not in this run's results: worked out from their price
     for r in db.all("SELECT id, price, currency FROM listings WHERE search_id = ? AND price_ron IS NULL",
@@ -280,7 +283,7 @@ def rescore(db, now=None):
         for r in rows:
             if not r["risk_signals"] or r["price_ron"] is None:
                 continue
-            signals = risk.with_title_phrases(json_object(r["risk_signals"]), r["title"])
+            signals = risk.with_current_phrases(json_object(r["risk_signals"]), r["title"], r["description"])
             others = len(photo_ads.get(r["image_url"], ()) - {r["external_id"]}) if r["image_url"] else 0
             signals["same_photo_ads"] = others if others <= SAME_PHOTO_MAX else 0
             level, score, reasons, notes = risk.assess(signals, r["price_ron"], typical, fmt)

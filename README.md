@@ -316,7 +316,7 @@ Run `--once` every 5 minutes:
 ## Database contract
 
 The monitor owns the schema. It creates the tables on start and adds new columns
-itself (`settings.schema_version`, now 19). Other apps may read everything and
+itself (`settings.schema_version`, now 20). Other apps may read everything and
 write only the columns marked ✎. All times are UTC `DATETIME`s. JSON columns hold
 text.
 
@@ -359,7 +359,10 @@ mention even when the listing isn't flagged, e.g. "seller has no reviews yet"; s
 showing the flag; `NULL`: none), `risk_good` (JSON list of good signs: an old seller account, a
 well-rated seller, buyer protection, an offer to meet; `NULL`: none), `good_level` (`low`/`medium`/`high` or
 `NULL`) and `good_score` (their points), `price_detail` (how `price` adds up, for
-eBay's totals), and `pin_order` ✎: pinned in the dashboard, in this order (lower first; `NULL`: not
+eBay's totals), `description` (the ad's description as the platform gives it, plain text keeping its
+line breaks, up to 10,000 characters; `NULL` when the platform gives none, e.g. Facebook, or for ads
+stored before v20 until a run reads it again: OLX, Publi24 and eBay at their next run; Vinted reads an
+item's page once, so its ads stored before v20 keep none; `--rescore` checks its phrases again), and `pin_order` ✎: pinned in the dashboard, in this order (lower first; `NULL`: not
 pinned), `marked_suspicious_at` ✎: when it was marked suspicious in the dashboard (shown as a likely scam; its
 price drops aren't emailed; `NULL`: not marked), and `excluded_at` ✎: when it was excluded in the dashboard (left out of price estimates, listed
 last; `NULL`: not excluded). The monitor never deletes a pinned or excluded listing, and
