@@ -91,3 +91,17 @@ def refresh(db, now):
             db.execute("UPDATE listings SET price_ron = price * ? WHERE currency = ?", (rate, currency))
     db.commit()
     log.info("Exchange rates from BNR (%s): 1 EUR = %s lei", date, rates.get("EUR"))
+
+
+# Platforms that show a seller's price converted from the seller's own currency (Vinted: a Polish item in
+# lei at Vinted's daily rate), so the shown price moves a little when the rate does. A provider says so
+# with converts_currency; listed here too for the v16 upgrade, which marks such changes already stored.
+RATE_PLATFORMS = ["vinted"]
+# A change this small on such a platform is the rate moving (daily rates move well under 1%), not the
+# seller: a seller rarely changes a price by under 2%
+RATE_CHANGE_MAX_PCT = 3
+
+
+def rate_change(old, new):
+    """The price moved by under RATE_CHANGE_MAX_PCT: a currency conversion, where the platform converts"""
+    return bool(old) and old > 0 and abs(new - old) / old * 100 < RATE_CHANGE_MAX_PCT

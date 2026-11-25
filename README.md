@@ -292,7 +292,7 @@ Run `--once` every 5 minutes:
 ## Database contract
 
 The monitor owns the schema. It creates the tables on start and adds new columns
-itself (`settings.schema_version`, now 15). Other apps may read everything and
+itself (`settings.schema_version`, now 16). Other apps may read everything and
 write only the columns marked ✎. All times are UTC `DATETIME`s. JSON columns hold
 text.
 
@@ -345,8 +345,13 @@ ads the run didn't show (they fell off the results or no longer match), each at 
 a missing ad (404, or a redirect away from it) or one its page says is closed gets `inactive_at`; OLX
 pages also update the price. An inactive ad that shows up in the results again is active again.
 
-**`price_history`**: `listing_id`, `price`, `currency`, `seen_at`. One row when a
-listing is first seen (`seen_at` = its `first_seen`), and one for every change.
+**`price_history`**: `listing_id`, `price`, `currency`, `seen_at`, `reason`. One row when a
+listing is first seen (`seen_at` = its `first_seen`), and one for every change. `reason` is `rate` when
+only the platform's currency conversion moved the price: Vinted shows a foreign seller's price (in PLN,
+EUR, HUF) converted to lei at its daily rate, so it moves a little with the rate. A change under 3% on
+such a platform (`converts_currency`), for a seller whose own currency (read from the item page) isn't
+the one shown, is marked so; it isn't emailed as a drop, and a dashboard shouldn't treat it as an update.
+`NULL`: the seller changed it.
 
 **`status_history`**: `listing_id`, `status`, `seen_at`. A row when the ad was found sold or
 removed (`inactive`), when it showed up in the results again after that (`active`), and when its

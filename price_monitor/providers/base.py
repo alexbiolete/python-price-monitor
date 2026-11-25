@@ -173,6 +173,11 @@ class Provider:
         """Hook for rates_sellers: one lookup. Raise ProviderError when refused."""
         return None
 
+    # The platform shows prices converted from the seller's own currency (Vinted), so they move a little
+    # with the exchange rate: small changes are then recorded as the rate's (rates.rate_change), unless the
+    # seller's currency (signals["seller_currency"], from the item page) is the one shown
+    converts_currency = False
+
     # Stored ads a search no longer shows are re-checked on their own page (the runner picks them),
     # at most max_check per search per run, check_delay seconds apart
     max_check = 10

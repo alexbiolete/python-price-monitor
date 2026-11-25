@@ -209,9 +209,12 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
             db.execute("INSERT INTO status_history (listing_id, status, seen_at) VALUES (?, 'active', ?)",
                        (row["id"], stamp))
         if l.price != row["price"] or l.currency != row["currency"]:
-            db.execute("INSERT INTO price_history (listing_id, price, currency, seen_at) VALUES (?, ?, ?, ?)",
-                       (row["id"], l.price, l.currency, stamp))
-            if l.currency == row["currency"] and row["price"] > 0:
+            # Only the platform's currency conversion moving (a foreign seller's price, shown converted)?
+            by_rate = (provider is not None and provider.converts_currency and l.currency == row["currency"]
+                       and signals.get("seller_currency") not in (l.currency,) and rates.rate_change(row["price"], l.price))
+            db.execute("INSERT INTO price_history (listing_id, price, currency, seen_at, reason) VALUES (?, ?, ?, ?, ?)",
+                       (row["id"], l.price, l.currency, stamp, "rate" if by_rate else None))
+            if l.currency == row["currency"] and row["price"] > 0 and not by_rate:
                 drop_pct = (row["price"] - l.price) / row["price"] * 100
                 if in_budget and not old and drop_pct >= drop_min_pct and not is_baseline and search["notify_price_drops"]:
                     drops.append({**item, "old_price": row["price"], "drop_pct": drop_pct})

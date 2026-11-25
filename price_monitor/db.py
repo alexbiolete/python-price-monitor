@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 # Columns added after the first version: (table, column, MySQL type, SQLite type).
 # Added on start when missing, so an existing database upgrades itself.
@@ -64,6 +64,9 @@ ADDED_COLUMNS = [
     ("searches", "min_price", "DOUBLE NULL", "REAL"),
     ("searches", "max_price", "DOUBLE NULL", "REAL"),
     ("searches", "store_outside_prices", "TINYINT(1) NOT NULL DEFAULT 0", "INTEGER NOT NULL DEFAULT 0"),
+    # v16: why a price changed: 'rate' when only the platform's currency conversion moved it (a seller
+    # pricing in another currency, shown converted: Vinted's foreign sellers); NULL: the seller changed it
+    ("price_history", "reason", "VARCHAR(10) NULL", "TEXT"),
 ]
 
 # Columns renamed since: (table, old name, new name), renamed in place on start, before the above
@@ -260,6 +263,8 @@ class Db:
         self._rename_columns()
         self._add_missing_columns()
         version = (self.one("SELECT schema_version FROM settings WHERE id = 1") or {"schema_version": SCHEMA_VERSION})
+        if version["schema_version"] < 16:
+            self._mark_rate_changes()
         if version["schema_version"] < 9:
             # Ads already found inactive before status_history: their one known change
             self.execute("INSERT INTO status_history (listing_id, status, seen_at)"
@@ -274,6 +279,21 @@ class Db:
                            " WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?", (table, column))
             return row["n"] > 0
         return any(r["name"] == column for r in self.all(f"PRAGMA table_info({table})"))
+
+    def _mark_rate_changes(self):
+        """v16: price changes recorded before 'reason' existed that were only a currency conversion moving
+        (rate_change: small, on a platform that converts), marked 'rate'"""
+        from .rates import RATE_PLATFORMS, rate_change
+        marks = ", ".join("?" for _ in RATE_PLATFORMS)
+        rows = self.all(f"SELECT h.id, h.listing_id, h.price, h.currency FROM price_history h JOIN listings l"
+                        f" ON l.id = h.listing_id WHERE l.platform IN ({marks}) ORDER BY h.listing_id, h.seen_at, h.id",
+                        tuple(RATE_PLATFORMS))
+        before = {}
+        for r in rows:
+            prev = before.get(r["listing_id"])
+            if prev and prev["currency"] == r["currency"] and rate_change(prev["price"], r["price"]):
+                self.execute("UPDATE price_history SET reason = 'rate' WHERE id = ?", (r["id"],))
+            before[r["listing_id"]] = r
 
     def _rename_columns(self):
         for table, old, new in RENAMED_COLUMNS:

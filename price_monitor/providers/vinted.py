@@ -104,6 +104,7 @@ class VintedProvider(Provider):
     name = "vinted"
     label = "Vinted"
     recheck_seen = True  # to notice reposts: only the item page says when it was (re)uploaded
+    converts_currency = True  # foreign sellers' prices are shown in lei, at Vinted's rate
     seller_info = ("reviews",)
     search_delay = 5
     needs_enrich = True
@@ -149,6 +150,12 @@ class VintedProvider(Provider):
         if isinstance(photos, list):
             signals["photos"] = len(photos)
         self.seller(listing, base=f"{urlsplit(listing.url).scheme}://{urlsplit(listing.url).netloc}")
+        # The seller's own price and currency (the results show it converted): next to the item's id
+        own = re.search(r'"id":"' + re.escape(listing.external_id) + r'".{0,600}?"price":\{"amount":"[\d.]+",'
+                        r'"currency_code":"([A-Z]{3})"\}', payload, re.S) \
+            or re.search(r'"price":\{"amount":"[\d.]+","currency_code":"([A-Z]{3})"\}', payload)
+        if own:
+            signals["seller_currency"] = own.group(1)
         attrs = ((section(payload, "attributes") or {}).get("data") or {}).get("attributes") or []
         uploaded = next((a.get("data", {}).get("value") for a in attrs if a.get("code") == "upload_date"), None)
         days = relative_days(uploaded)
