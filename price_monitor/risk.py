@@ -61,7 +61,7 @@ PHRASE_POINTS = {
 # Offers to meet (a handover in person, a local pickup): then the missing buyer protection isn't held
 # against it (the buyer can see it before paying), and "only ships" can't be right
 MEET_PHRASES = {
-    "offers to meet": [
+    "offers to meet in person": [
         "predare personala", "predarea personala", "predare in mana", "predarea in mana", "predare pe loc",
         "ridicare locala", "ridicarea locala", "ridicare personala", "ridicarea personala", "se poate ridica",
         "ridicare din", "ridicarea din", "ma pot intalni", "intalnire in", "vin la tine", "testare la predare",
@@ -140,7 +140,7 @@ def static_signals(listing, platform):
     s["phrases"] = phrase_reasons(listing.title, description)
     s["rush"] = phrase_reasons(listing.title, description, RUSH_PHRASES)
     s["messaging"] = phrase_reasons(listing.title, description, NOTE_PHRASES)
-    s["meets"] = bool(phrase_reasons(listing.title, description, MEET_PHRASES))
+    s["meets"] = phrase_reasons(listing.title, description, MEET_PHRASES)  # e.g. 'offers to meet in person ("predare personala")'
     s["negotiable"] = phrase_reasons(listing.title, description, NEGOTIABLE_PHRASES)
     s["fixed_price"] = phrase_reasons(listing.title, description, FIXED_PRICE_PHRASES)
     if s["fixed_price"]:
@@ -153,7 +153,9 @@ def with_title_phrases(signals, title):
     in the title: a kind already there stays as it was (it may have come from the description, which
     isn't stored), a kind the title shows now is added. So new rules reach listings stored before them."""
     s = dict(signals)
-    s["meets"] = bool(s.get("meets")) or bool(phrase_reasons(title, "", MEET_PHRASES))
+    # Offers to meet: stored as the phrase found (a list; before, a bool), else what the title shows
+    meets = s.get("meets")
+    s["meets"] = meets if isinstance(meets, list) and meets else phrase_reasons(title, "", MEET_PHRASES) or bool(meets)
     for key, groups in (("phrases", PHRASES), ("rush", RUSH_PHRASES), ("messaging", NOTE_PHRASES),
                         ("negotiable", NEGOTIABLE_PHRASES), ("fixed_price", FIXED_PRICE_PHRASES)):
         have = list(s.get(key) or [])
@@ -246,27 +248,41 @@ def assess(signals, price_ron, typical, fmt_price):
     return level, score, reasons, notes
 
 
-# An account this old (days) is a good sign; shown in years
-OLD_ACCOUNT_DAYS = 730
+# Good signs score too, in steps: an older seller account counts for more (from this many years, points)
+ACCOUNT_YEARS_POINTS = [(10, 3), (5, 2), (2, 1)]
+# 1 point: some good signs, 2-3: good signs, 4 or more: very good signs
+GOOD_LEVELS = [(4, "high"), (2, "medium"), (1, "low")]
 
 
 def good_signs(signals):
-    """The good signs a listing shows (no points; shown in green, between the notes and the warning signs, and
-    counted by the dashboard's deal score): an old seller account, a well-rated seller, buyer protection
-    offered, an offer to meet in person"""
-    good = []
+    """(level or None, points, reasons) for the good signs a listing shows: an old seller account (1 point
+    from 2 years, 2 from 5, 3 from 10), a well-rated seller (4.5/5 or more with 5 reviews: 1, with 20: 2),
+    buyer protection offered (1), an offer to meet in person (1). Shown in green, between the notes and
+    the warning signs; the dashboard's deal score counts them too."""
+    points, good = 0, []
     age = signals.get("account_age_days")
-    if age is not None and age >= OLD_ACCOUNT_DAYS:
+    if age is not None:
         years = age // 365
-        good.append(f"seller account {years} years old")
+        step = next((p for minimum, p in ACCOUNT_YEARS_POINTS if years >= minimum), 0)
+        if step:
+            points += step
+            good.append(f"seller account {years} years old")
     reviews, rating = signals.get("seller_reviews") or 0, signals.get("seller_rating")
     if reviews >= 5 and rating is not None and rating >= 0.9:
+        points += 2 if reviews >= 20 else 1
         good.append(f"seller rated {rating * 5:.1f}/5 ({reviews} reviews)")
     if signals.get("unprotected") is False:
+        points += 1
         good.append("offers buyer protection")
-    if signals.get("meets"):
-        good.append("offers to meet in person")
-    return good
+    meets = signals.get("meets")
+    if isinstance(meets, list) and meets:
+        points += 1
+        good.append(meets[0])  # 'offers to meet in person ("predare personala")'
+    elif meets is True:
+        points += 1
+        good.append("offers to meet in person")  # stored before the phrase was kept
+    level = next((name for minimum, name in GOOD_LEVELS if points >= minimum), None)
+    return level, points, good
 
 
 def contact_in_text(text):

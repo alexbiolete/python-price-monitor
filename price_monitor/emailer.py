@@ -22,7 +22,16 @@ MUTED = "#71717a"
 LINE = "#e4e4e7"
 SOFT = "#f4f4f5"
 GOOD = "#15803d"
-GOOD_BG = "#dcfce7"  # the good signs' box: light green, its text GOOD
+# The good signs' level as their box's heading (risk.good_signs: 1 point some, 2-3 good, 4+ very good)
+GOOD_LABELS = {"low": "Some good signs", "medium": "Good signs", "high": "Very good signs"}
+# The good signs' box (background, text): the greenest with no warning signs, fainter as they grow, the
+# faintest on a likely scam (good signs count for less there)
+GOOD_SHADES = {
+    None: ("#dcfce7", GOOD),
+    "low": ("#e5f9ec", "#3b8c58"),
+    "medium": ("#eef8f2", "#62a07b"),
+    "high": ("#f4f8f5", "#93b5a0"),
+}
 # The risk levels: yellow, orange, red (background, text, label)
 RISK_STYLE = {
     "low": ("#fef9c3", "#854d0e", "Slight risk"),
@@ -113,9 +122,11 @@ def _risk_html(item):
 
 def _good_html(item):
     """Good signs (an old seller account, a well-rated seller, buyer protection, an offer to meet), in a
-    green box between the notes and the warning signs (the dashboard's "Good signs")"""
+    green box between the notes and the warning signs (the dashboard's "Good signs"); its green fades as
+    the risk level rises"""
     good = item.get("risk_good") or []
-    return _box("✓ Good signs", good, GOOD_BG, GOOD) if good else ""
+    background, ink = GOOD_SHADES.get(item.get("risk_level"), GOOD_SHADES[None])
+    return _box(f"✓ {GOOD_LABELS.get(item.get('good_level'), 'Good signs')}", good, background, ink) if good else ""
 
 
 def _notes_html(item):
@@ -138,7 +149,7 @@ def _risk_text(item):
     if item.get("risk_notes"):
         text += f"\n      ⓘ Notes: {'; '.join(item['risk_notes'])}"
     if item.get("risk_good"):
-        text += f"\n      ✓ Good signs: {'; '.join(item['risk_good'])}"
+        text += f"\n      ✓ {GOOD_LABELS.get(item.get('good_level'), 'Good signs')}: {'; '.join(item['risk_good'])}"
     if item.get("risk_level") in SHOWN_RISK and item.get("risk_reasons"):
         text += f"\n      ⚠ {RISK_STYLE[item['risk_level']][2]}: {'; '.join(item['risk_reasons'])}"
     return text
