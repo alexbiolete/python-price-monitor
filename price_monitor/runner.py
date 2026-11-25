@@ -251,6 +251,45 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
     return new, drops, stats, is_baseline
 
 
+def rescore(db, now=None):
+    """Every stored listing's risk worked out again with the current rules (risk.py), from what it stored:
+    its signals (and the current phrase lists on its title), the same photo on other ads of its platform,
+    and its search's typical price from the listings stored for it (in the budget, still up, within the
+    age limit). For after the rules change; nothing is read from the platforms. Returns how many changed."""
+    now = now or utcnow()
+    settings = db.one("SELECT default_max_age_days FROM settings WHERE id = 1") or {}
+    fmt = lambda amount: fmt_price(amount, "RON")  # noqa: E731
+    changed = 0
+    for search in db.all("SELECT * FROM searches"):
+        rows = db.all("SELECT * FROM listings WHERE search_id = ?", (search["id"],))
+        max_age = search.get("max_age_days") or settings.get("default_max_age_days")
+        oldest = now - timedelta(days=max_age) if max_age else None
+        lo, hi = search.get("min_budget"), search.get("max_budget")
+        in_budget = lambda r: r["price_ron"] is not None and (lo is None or r["price_ron"] >= lo) \
+            and (hi is None or r["price_ron"] <= hi)  # noqa: E731
+        typical = risk.typical_price([r["price_ron"] for r in rows if in_budget(r) and r["inactive_at"] is None
+                                      and not (oldest and r["posted_at"] and from_db_time(r["posted_at"]) < oldest)])
+        photo_ads = {}
+        for r in db.all("SELECT image_url, external_id FROM listings WHERE platform = ? AND image_url IS NOT NULL",
+                        (search["platform"],)):
+            photo_ads.setdefault(r["image_url"], set()).add(r["external_id"])
+        for r in rows:
+            if not r["risk_signals"] or r["price_ron"] is None:
+                continue
+            signals = risk.with_title_phrases(json_object(r["risk_signals"]), r["title"])
+            others = len(photo_ads.get(r["image_url"], ()) - {r["external_id"]}) if r["image_url"] else 0
+            signals["same_photo_ads"] = others if others <= SAME_PHOTO_MAX else 0
+            level, score, reasons, notes = risk.assess(signals, r["price_ron"], typical, fmt)
+            values = (level, score, json.dumps(reasons, ensure_ascii=False), json.dumps(signals, ensure_ascii=False),
+                      json.dumps(notes, ensure_ascii=False) if notes else None)
+            if values != (r["risk_level"], r["risk_score"], r["risk_reasons"], r["risk_signals"], r["risk_notes"]):
+                changed += 1
+                db.execute("UPDATE listings SET risk_level = ?, risk_score = ?, risk_reasons = ?, risk_signals = ?,"
+                           " risk_notes = ? WHERE id = ?", values + (r["id"],))
+    db.commit()
+    return changed
+
+
 # The risk levels, lowest first ("none": no level); settings.email_max_risk is the highest one emailed
 RISK_ORDER = ["none", "low", "medium", "high"]
 

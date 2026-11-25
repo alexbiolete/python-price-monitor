@@ -60,6 +60,7 @@ With no SMTP settings, the email is printed instead of sent.
 ```bash
 .venv/bin/python -m price_monitor --import searches.example.json   # add searches (once)
 .venv/bin/python -m price_monitor --export searches.json           # save every search to a file (a backup)
+.venv/bin/python -m price_monitor --rescore                        # every stored listing's risk again, with the current rules
 .venv/bin/python -m price_monitor                  # keep running; Ctrl+C to stop
 .venv/bin/python -m price_monitor --once           # one check, then exit (what cron runs)
 .venv/bin/python -m price_monitor --status         # the searches and their last run

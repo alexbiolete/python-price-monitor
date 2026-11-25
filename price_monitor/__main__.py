@@ -5,6 +5,8 @@
   python -m price_monitor --test-email      email the latest stored listings, to check delivery
   python -m price_monitor --import FILE     add the searches in a JSON file to the database
   python -m price_monitor --export FILE     write every search to a JSON file --import reads (a backup)
+  python -m price_monitor --rescore         work out every stored listing's risk again with the current
+                                            rules (after they change; reads nothing from the platforms)
   python -m price_monitor --status          print the searches and their last run
   python -m price_monitor --resend-all      clear the stored listings, then run every search and
                                             email everything that matches now (one full digest)
@@ -185,6 +187,10 @@ def main(argv):
             if i + 1 >= len(argv):
                 raise SystemExit("Usage: python -m price_monitor --import FILE")
             import_searches(db, argv[i + 1])
+            return 0
+        if "--rescore" in argv:
+            from .runner import rescore
+            log.info("Re-scored the stored listings: %d changed", rescore(db))
             return 0
         if "--export" in argv:
             i = argv.index("--export")
