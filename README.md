@@ -59,6 +59,7 @@ With no SMTP settings, the email is printed instead of sent.
 
 ```bash
 .venv/bin/python -m price_monitor --import searches.example.json   # add searches (once)
+.venv/bin/python -m price_monitor --export searches.json           # save every search to a file (a backup)
 .venv/bin/python -m price_monitor                  # keep running; Ctrl+C to stop
 .venv/bin/python -m price_monitor --once           # one check, then exit (what cron runs)
 .venv/bin/python -m price_monitor --status         # the searches and their last run
@@ -94,6 +95,23 @@ again never duplicates or overwrites anything. Each search:
 | `sort_order` | Lower first (default 100) |
 
 All prices are in lei; ads in other currencies are converted (see [What a search filters](#what-a-search-filters)).
+
+### Backing up the searches
+
+The searches (with every budget, price, keyword and switch) live only in the database, so keep a copy:
+`--export FILE` writes them all in the same format `--import` reads, and importing that file into an
+empty database brings them back unchanged.
+
+- **On the server, daily:** the cron job `deploy.sh` installs also exports them every night to
+  `backups/searches-YYYY-MM-DD.json` in the app's folder, keeping the last 14. That covers a bad edit
+  or a broken upgrade.
+- **On your computer:** `./deploy.sh --export` runs the export on the server and saves `searches.json`
+  here, a copy away from the server. It's gitignored, since this repo is public and the file shows what
+  you're searching for and your budgets; keep it in your computer's backups instead.
+
+To restore, into an empty database: `.venv/bin/python -m price_monitor --import searches.json` (on the
+server, from a `backups/` file). The export holds the search links and settings only (no passwords or
+cookies), and not the listings: the searches gather those again.
 
 ### Running without the dashboard
 
@@ -248,6 +266,7 @@ A laptop keeps its own data in `price_monitor.db` and sends its own email (marke
 ./deploy.sh            # copy code + config, set up the venv, install the cron job
 ./deploy.sh --remove   # remove the cron job
 ./deploy.sh --resend   # deploy, then clear the stored listings and email everything that matches now
+./deploy.sh --export   # save the server's searches to searches.json here (see Backing up the searches)
 ssh biolete.ro 'cd apps/price-monitor && .venv/bin/python -m price_monitor --status'
 ssh biolete.ro tail -f logs/cron-price-monitor.log
 ```

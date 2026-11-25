@@ -4,6 +4,7 @@
   python -m price_monitor --once            one tick, then exit (what cron runs)
   python -m price_monitor --test-email      email the latest stored listings, to check delivery
   python -m price_monitor --import FILE     add the searches in a JSON file to the database
+  python -m price_monitor --export FILE     write every search to a JSON file --import reads (a backup)
   python -m price_monitor --status          print the searches and their last run
   python -m price_monitor --resend-all      clear the stored listings, then run every search and
                                             email everything that matches now (one full digest)
@@ -72,6 +73,34 @@ def import_searches(db, path):
         log.info("Added %s (%s)", s["name"], platform)
     db.commit()
     log.info("Imported %d searches", added)
+
+
+# The search settings an export keeps, in --import's field names (not the monitor's own state: last
+# run, baseline, provider_state); JSON columns are written as JSON
+EXPORT_FIELDS = ["name", "platform", "query_url", "min_budget", "max_budget", "min_price", "max_price",
+                 "store_outside_prices", "include_keywords", "exclude_keywords", "options", "enabled", "show_listings",
+                 "notify_new", "notify_price_drops", "interval_minutes", "max_age_days", "sort_order"]
+BOOL_FIELDS = {"store_outside_prices", "enabled", "show_listings", "notify_new", "notify_price_drops"}
+JSON_FIELDS = {"include_keywords": [], "exclude_keywords": [], "options": {}}
+
+
+def export_searches(db, path):
+    """Every search, in --import's format, so `--import FILE` restores them into an empty database"""
+    searches = []
+    for row in db.all("SELECT * FROM searches ORDER BY sort_order, name, platform"):
+        s = {}
+        for key in EXPORT_FIELDS:
+            value = row.get(key)
+            if key in JSON_FIELDS:
+                value = json.loads(value) if value else JSON_FIELDS[key]
+            elif key in BOOL_FIELDS:
+                value = bool(value)
+            elif isinstance(value, float) and value.is_integer():
+                value = int(value)
+            s[key] = value
+        searches.append(s)
+    Path(path).write_text(json.dumps(searches, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    log.info("Exported %d searches to %s", len(searches), path)
 
 
 def resend_all(db, platforms=None, search_ids=None):
@@ -156,6 +185,12 @@ def main(argv):
             if i + 1 >= len(argv):
                 raise SystemExit("Usage: python -m price_monitor --import FILE")
             import_searches(db, argv[i + 1])
+            return 0
+        if "--export" in argv:
+            i = argv.index("--export")
+            if i + 1 >= len(argv):
+                raise SystemExit("Usage: python -m price_monitor --export FILE")
+            export_searches(db, argv[i + 1])
             return 0
         if "--resend-all" in argv:
             resend_all(db, platforms, search_ids)

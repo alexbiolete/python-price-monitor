@@ -5,6 +5,11 @@
 #   ./deploy.sh --remove   remove the cron job (leaves the files in place)
 #   ./deploy.sh --resend   deploy, then clear the stored listings and email everything that
 #                          matches now (python -m price_monitor --resend-all on the server)
+#   ./deploy.sh --export   save the server's searches to searches.json here (a backup, gitignored:
+#                          the repo is public; python -m price_monitor --import searches.json restores them)
+#
+# The cron job also exports the searches daily on the server, to backups/searches-DATE.json (the
+# last 14 kept), for a bad edit or a broken upgrade.
 #
 # Re-run after changing the code or .env. Searches, intervals and on/off live in
 # the database (edit them in the dashboard), so changing those needs no deploy.
@@ -24,7 +29,17 @@ CRON_TAG="# price-monitor"
 CRON_SCHEDULE="$(grep -E '^CRON_SCHEDULE=' .env.production 2>/dev/null | tail -1 | cut -d= -f2- | tr -d "\"'" || true)"
 CRON_SCHEDULE="${CRON_SCHEDULE:-*/5 * * * *}"
 [[ $(wc -w <<<"$CRON_SCHEDULE") -eq 5 ]] || { echo "CRON_SCHEDULE must have 5 fields, got: $CRON_SCHEDULE"; exit 1; }
+# Daily at 04:17: the searches to backups/searches-YYYY-MM-DD.json, the last 14 kept (% is special in crontab)
+BACKUP_LINE='17 4 * * * cd ~/'"$REMOTE_DIR"' && mkdir -p backups && .venv/bin/python -W ignore -m price_monitor --export backups/searches-$(date +\%F).json >> ~/'"$LOG"' 2>&1 && ls -1t backups/searches-*.json | tail -n +15 | xargs -r rm -- '"$CRON_TAG"' backup'
 CRON_LINE="$CRON_SCHEDULE cd ~/$REMOTE_DIR && timeout 280 .venv/bin/python -W ignore -m price_monitor --once >> ~/$LOG 2>&1 $CRON_TAG"
+
+if [[ "${1:-}" == "--export" ]]; then
+  ssh "$HOST" "cd ~/$REMOTE_DIR && .venv/bin/python -W ignore -m price_monitor --export searches.export.json"
+  scp -q "$HOST:$REMOTE_DIR/searches.export.json" searches.json
+  ssh "$HOST" "rm -f ~/$REMOTE_DIR/searches.export.json"
+  echo "Saved the server's searches to searches.json (gitignored; keep it, e.g. in your Mac's backups)."
+  exit 0
+fi
 
 if [[ "${1:-}" == "--remove" ]]; then
   ssh "$HOST" "crontab -l 2>/dev/null | grep -vF '$CRON_TAG' | crontab -"
@@ -52,8 +67,8 @@ echo "==> Setting up the virtualenv"
 ssh "$HOST" "cd ~/$REMOTE_DIR && { [ -x .venv/bin/python ] || $PYTHON -m venv .venv; } \
   && .venv/bin/pip install -q --disable-pip-version-check -r requirements.txt"
 
-echo "==> Installing cron job"
-ssh "$HOST" "{ crontab -l 2>/dev/null | grep -vF '$CRON_TAG'; echo '$CRON_LINE'; } | crontab -"
+echo "==> Installing cron jobs (the monitor, and the daily searches backup)"
+ssh "$HOST" "{ crontab -l 2>/dev/null | grep -vF '$CRON_TAG'; echo '$CRON_LINE'; echo '$BACKUP_LINE'; } | crontab -"
 ssh "$HOST" "crontab -l | grep -F '$CRON_TAG'"
 
 if [[ "${1:-}" == "--resend" ]]; then

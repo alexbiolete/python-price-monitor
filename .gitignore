@@ -3,3 +3,5 @@
 *.db
 __pycache__/
 .venv/
+# A backup of your searches (./deploy.sh --export): personal, kept out of this public repo
+searches.json
