@@ -23,15 +23,18 @@ def text(value, limit=None):
     return value[:limit] if limit else value
 
 
-# Tags that end a line in an ad's HTML description (OLX sends "line one<br />line two")
-LINE_BREAK = re.compile(r"<\s*(br|/?p|/?div|/?li|/?h[1-6])\b[^<>]*>", re.IGNORECASE)
+# Tags that end a line in an ad's HTML description, with the newline written after one if any: OLX
+# sends "line one<br />\nline two", and a blank line as "<br />\n<br />\n"
+LINE_BREAK = re.compile(r"<\s*(br|/?p|/?div|/?li|/?h[1-6])\b[^<>]*>[ \t]*(\r\n|\r|\n)?", re.IGNORECASE)
 
 
 def lines(value):
-    """Plain text keeping its line breaks (an ad's description, split into sentences at them):
-    entities decoded, line-ending tags made line breaks, other tags removed, each line on one line."""
-    value = LINE_BREAK.sub("\n", html.unescape(str(value or "")).replace("\r\n", "\n").replace("\r", "\n"))
-    return "\n".join(line for line in (text(part) for part in value.split("\n")) if line)
+    """Plain text keeping its line breaks as written, blank lines too (an ad's description): entities
+    decoded, line-ending tags made line breaks, other tags removed, spaces within each line tidied, and
+    blank lines only at its start or end dropped."""
+    value = LINE_BREAK.sub("\n", html.unescape(str(value or "")))
+    value = value.replace("\r\n", "\n").replace("\r", "\n")
+    return "\n".join(text(part) for part in value.split("\n")).strip("\n")
 
 
 def url(value):
