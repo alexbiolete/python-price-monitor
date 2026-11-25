@@ -17,19 +17,49 @@ import unicodedata
 PHRASES = {
     "asks for payment in advance": [
         "plata in avans", "platesti in avans", "plata anticipat", "avans", "plata inainte",
-        "payment in advance", "pay in advance", "upfront", "przedplata",
+        "achit in avans", "achitati in avans", "achitare in avans", "plata integrala inainte",
+        "trimit dupa plata", "trimit dupa ce platesti", "dupa confirmarea platii",
+        "payment in advance", "pay in advance", "upfront", "przedplata", "zaliczka", "προκαταβολη",
     ],
     "asks for a money transfer": [
         "western union", "moneygram", "transfer bancar", "virament", "revolut", "paypal friends",
-        "bank transfer", "przelew",
+        "iban", "cont bancar", "transferwise", "wise.com", "skrill", "paysafe", "bitcoin", "crypto",
+        "usdt", "gift card", "card cadou", "bank transfer", "przelew", "blik",
     ],
-    "wants to talk on WhatsApp or Telegram": ["whatsapp", "whats app", "telegram", "viber", "signal app"],
-    "sends a payment link or code": ["link de plata", "link plata", "cod de plata", "payment link", "link de livrare"],
+    "sends a payment link or code": [
+        "link de plata", "link plata", "cod de plata", "link de livrare", "plata prin link", "link pentru plata",
+        "link de confirmare", "datele cardului", "date card", "verificare card", "cod sms", "cod de verificare",
+        "codul primit", "payment link",
+    ],
     "only ships, no meeting": [
         "doar prin curier", "numai prin curier", "doar livrare", "trimit doar", "doar cu livrare",
-        "only shipping", "only by courier",
+        "doar expediere", "nu predau personal", "fara predare personala", "nu ma intalnesc", "nu fac intalniri",
+        "fara intalnire", "only shipping", "only by courier", "only delivery", "no meetings", "tylko wysyłka",
     ],
-    "says they're abroad": ["sunt in strainatate", "nu sunt in tara", "sunt plecat din tara", "i am abroad", "im abroad"],
+    "says they're abroad": [
+        "sunt in strainatate", "nu sunt in tara", "sunt plecat din tara", "ma aflu in strainatate",
+        "lucrez in strainatate", "plecat in strainatate", "i am abroad", "im abroad",
+    ],
+}
+
+# Worth a note, no points: talking on a messaging app is common among honest sellers too, but it's where
+# deals leave the platform's protection. Shown with the notes (and among a level's reasons).
+NOTE_PHRASES = {
+    "mentions WhatsApp or Telegram": [
+        "whatsapp", "whats app", "wapp", "whatsap", "watsapp", "watsap", "wsp", "telegram", "viber",
+        "signal app", "wa.me", "t.me",
+    ],
+}
+# Before, a messaging app was a scored phrase of this kind; stored signals may still carry it
+OLD_MESSAGING_REASON = "wants to talk on WhatsApp or Telegram"
+
+# Milder: pushing for a quick sale. Honest sellers write "vand urgent" too, so it's 1 point (alone: a
+# slight risk), on top of the signs above. Same matching.
+RUSH_PHRASES = {
+    "pushes for a quick sale": [
+        "urgent", "urgenta", "vand repede", "doar azi", "azi doar", "numai azi", "pana diseara",
+        "primul venit", "plec din tara", "asap", "today only", "first come", "pilne", "pilnie", "επειγον",
+    ],
 }
 
 PHONE = re.compile(r"(?<!\d)(?:\+?\d[\s.\-]?){9,13}(?!\d)")
@@ -47,10 +77,11 @@ def plain(text):
     return "".join(c for c in text if not unicodedata.combining(c)).lower()
 
 
-def phrase_reasons(title, description):
+def phrase_reasons(title, description, groups=None):
+    """One reason per kind of phrase found in the title or description (groups: PHRASES by default)"""
     text = f" {plain(title)} {plain(description)} "
     found = []
-    for reason, words in PHRASES.items():
+    for reason, words in (groups or PHRASES).items():
         for w in words:
             if re.search(r"(?<![a-z])" + re.escape(w) + r"(?![a-z])", text):
                 found.append(f'{reason} ("{w}")')
@@ -61,7 +92,10 @@ def phrase_reasons(title, description):
 def static_signals(listing, platform):
     """What the listing itself shows, as a small JSON-able dict (stored on the listing)."""
     s = dict(listing.signals or {})
-    s["phrases"] = phrase_reasons(listing.title, s.pop("description", ""))
+    description = s.pop("description", "")
+    s["phrases"] = phrase_reasons(listing.title, description)
+    s["rush"] = phrase_reasons(listing.title, description, RUSH_PHRASES)
+    s["messaging"] = phrase_reasons(listing.title, description, NOTE_PHRASES)
     return s
 
 
@@ -74,7 +108,7 @@ def typical_price(prices):
 def assess(signals, price_ron, typical, fmt_price):
     """(level or None, score, reasons, notes) for a listing. A seller with no reviews yet adds its
     point, but alone it gives no level: it's only a note (a grey mention), shown when there's no
-    level. A level needs at least one other sign."""
+    level. A level needs at least one other sign. A messaging app (WhatsApp...) is a note with no points."""
     score, reasons, notes = 0, [], []
     weak = 0  # points that alone give no level
 
@@ -110,9 +144,21 @@ def assess(signals, price_ron, typical, fmt_price):
         score += 1
         reasons.append(f"seller has {negative} negative reviews out of {reviews}")
 
-    phrases = signals.get("phrases") or []
+    phrases = [p for p in signals.get("phrases") or [] if not p.startswith(OLD_MESSAGING_REASON)]
     score += 2 * min(len(phrases), 2)
     reasons += phrases
+
+    # A messaging app: a note, no points (also when stored as the old scored phrase)
+    old = [p.replace(OLD_MESSAGING_REASON, "mentions WhatsApp or Telegram", 1)
+           for p in signals.get("phrases") or [] if p.startswith(OLD_MESSAGING_REASON)]
+    for note in (signals.get("messaging") or old)[:1]:
+        reasons.append(note)
+        notes.append(note)
+
+    rush = signals.get("rush") or []
+    if rush:
+        score += 1
+        reasons += rush
 
     if signals.get("contact_in_text"):
         score += 2
@@ -125,7 +171,7 @@ def assess(signals, price_ron, typical, fmt_price):
 
     if signals.get("unprotected") and score > weak:
         score += 1
-        reasons.append("no protected payment (OLX delivery off)")
+        reasons.append("no buyer protection")
 
     level = next((name for minimum, name in LEVELS if score >= minimum), None) if score > weak else None
     return level, score, reasons, notes

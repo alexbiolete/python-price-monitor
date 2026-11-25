@@ -142,7 +142,7 @@ class OlxProvider(Provider):
         if created:
             signals["account_age_days"] = max(0, (datetime.utcnow() - created).days)
         contact = offer.get("contact") or {}
-        # OLX delivery (protected payment) off. A phone number in an OLX ad is normal (OLX shows
+        # No buyer protection: the ad doesn't offer OLX's delivery, which carries it. A phone number in an OLX ad is normal (OLX shows
         # phones itself), so it isn't a signal here; WhatsApp and the like are caught by the phrases
         signals["unprotected"] = not contact.get("courier")
         return Listing(

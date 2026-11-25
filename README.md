@@ -157,16 +157,19 @@ Nothing is hidden: a flag means "look closer, and pay only through the platform"
 | Seller account under 30 days old (under 7 days: 3) | 2 | OLX |
 | Seller with no reviews, or rated under 4/5 | 1 | Vinted (item page), eBay, OLX (its ratings service) |
 | 2 or more negative reviews, a tenth of them or more (OLX: 1-2 stars) | 1 | Vinted, OLX |
-| Phrases: payment in advance, money transfers, WhatsApp/Telegram, payment links, "only by courier", "I'm abroad" | 2 each, up to 2 kinds | OLX description; Vinted title and description |
+| Phrases: payment in advance, money transfers (IBAN, Revolut, crypto, gift cards), payment links or card codes, "only by courier" / no meeting, "I'm abroad" | 2 each, up to 2 kinds | Title and description, in Romanian, English, Polish and Greek ([`risk.py`](price_monitor/risk.py)) |
+| Mentions WhatsApp, Telegram or Viber (also "wapp", wa.me and t.me links): honest sellers do it too, but it's where deals leave the platform | 0: a note | Title and description |
+| Rushing the sale: "urgent", "doar azi" (today only), "primul venit" (first come), "plec din țară" | 1 | Title and description; mild, since honest sellers write "vând urgent" too |
 | A phone number or email in the ad (to talk off the platform) | 2 | Vinted |
 | One photo or none | 1 | Both |
-| OLX delivery off, when there's another sign | 1 | OLX |
+| No buyer protection (the ad doesn't offer the platform's delivery), when there's another sign | 1 | OLX |
 
 1 point is `low`, 2-3 `medium`, 4 or more `high`. Only these derived facts are
 stored, never who the seller is.
 
 A seller with no reviews yet adds its point, but alone it gives no level: only a grey
-*"ⓘ Seller has no reviews yet"* under the listing (`risk_notes`). With any other sign it counts
+*"ⓘ Notes: seller has no reviews yet"* under the listing (`risk_notes`), next to any other notes, such as
+a messaging app in the ad. With any other sign it counts
 toward the level, and the level's reasons include it.
 
 OLX's seller ratings (what an ad's page shows, e.g. *"5.0 / 5, 18 ratinguri"*) come from its

@@ -29,7 +29,7 @@ RISK_STYLE = {
     "high": ("#fee2e2", "#991b1b", "Likely scam"),
 }
 SHOWN_RISK = tuple(RISK_STYLE)
-NOTE_INK = "#3f3f46"  # the "worth considering" box: grey, darker than MUTED to read on SOFT
+NOTE_INK = "#3f3f46"  # the "notes" box: grey, darker than MUTED to read on SOFT
 # After the hidden preview text: blank characters, so inbox previews stop there instead of running
 # on into the email's first visible words (the title, "PRICE MONITOR")
 PREVIEW_STOP = "&#847;&zwnj;&nbsp;" * 90
@@ -79,7 +79,7 @@ def _listing_row(item, price_html):
         f'<td style="padding:10px 0;border-top:1px solid {LINE};vertical-align:top">'
         f'<a href="{esc(item["url"])}" style="color:{INK};font-size:14px;font-weight:600;line-height:1.4;text-decoration:none">{esc(item["title"])}</a>'
         + (f'<div style="margin-top:2px;color:{MUTED};font-size:12px">{esc(meta)}</div>' if meta else "")
-        + _risk_html(item) + _worth_considering_html(item)
+        + _risk_html(item) + _notes_html(item)
         + f'<div style="margin-top:4px"><a href="{esc(item["url"])}" style="color:{ACCENT};font-size:12px;font-weight:600;text-decoration:none">View listing →</a></div>'
         "</td>"
         f'<td align="right" style="padding:10px 0 10px 10px;border-top:1px solid {LINE};vertical-align:top;white-space:nowrap;font-size:14px;color:{INK}">{price_html}</td>'
@@ -96,15 +96,16 @@ def _risk_html(item):
             f'<b>⚠ {label}:</b> {esc("; ".join(reasons))}</div>')
 
 
-def _worth_considering_html(item):
-    """Worth considering, not a warning: a grey box like the risk levels' ones (the dashboard's "Worth
-    considering"), when the listing has no risk level (a level's reasons include the notes)"""
+def _notes_html(item):
+    """Notes (a seller with no reviews yet, a messaging app in the ad), milder than a risk level: a grey
+    box like the risk levels' ones (the dashboard's "Notes"), when the listing has no risk level (a
+    level's reasons include the notes)"""
     notes = item.get("risk_notes") or []
     if not notes or (item.get("risk_level") in SHOWN_RISK and item.get("risk_reasons")):
         return ""
     text = "; ".join(notes)
     return (f'<div style="margin-top:6px;padding:6px 10px;border-radius:10px;background:{SOFT};color:{NOTE_INK};font-size:12px;line-height:1.45">'
-            f'<b>ⓘ Worth considering:</b> {esc(text)}</div>')
+            f'<b>ⓘ Notes:</b> {esc(text)}</div>')
 
 
 def _detail_html(item):
@@ -119,7 +120,7 @@ def _risk_text(item):
     if item.get("risk_level") in SHOWN_RISK and item.get("risk_reasons"):
         return f"\n      ⚠ {RISK_STYLE[item['risk_level']][2]}: {'; '.join(item['risk_reasons'])}"
     if item.get("risk_notes"):
-        return f"\n      ⓘ Worth considering: {'; '.join(item['risk_notes'])}"
+        return f"\n      ⓘ Notes: {'; '.join(item['risk_notes'])}"
     return ""
 
 
