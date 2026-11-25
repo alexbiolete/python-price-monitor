@@ -84,7 +84,8 @@ again never duplicates or overwrites anything. Each search:
 | `name` | Required. What it's called, also the product it belongs to: searches with the same name on different platforms are one product (one email section, one price estimate) |
 | `platform` | `olx` (default), `vinted`, `publi24`, `ebay` or `facebook` |
 | `query_url` | Required. The platform's results page with your filters set; see [Platforms](#platforms) |
-| `min_budget`, `max_budget` | What you'd pay, in lei: only these are emailed (and listed in a dashboard) |
+| `currency` | What the budget and prices below are in: `RON` (default), `EUR`, ... |
+| `min_budget`, `max_budget` | What you'd pay: only these are emailed (and listed in a dashboard) |
 | `min_price`, `max_price` | What a real one costs, broader than the budget: anything outside isn't stored (games, parts) |
 | `store_outside_prices` | `true` to store ads outside the prices too (default `false`) |
 | `include_keywords`, `exclude_keywords` | Must contain one of / leave out any of, matched in the title, lowercase |
@@ -95,7 +96,8 @@ again never duplicates or overwrites anything. Each search:
 | `interval_minutes`, `max_age_days` | Default: `settings.default_interval_minutes` (10) and `default_max_age_days` (30) |
 | `sort_order` | Lower first (default 100) |
 
-All prices are in lei; ads in other currencies are converted (see [What a search filters](#what-a-search-filters)).
+Budgets and prices are in the search's `currency` (lei by default); they and the ads are compared in lei,
+converted at BNR's rates (see [What a search filters](#what-a-search-filters)).
 
 ### Backing up the searches
 
@@ -139,7 +141,8 @@ After that, each run reports listings it hasn't seen and drops of at least
 
 ### What a search filters
 
-- **Budget:** `min_budget` / `max_budget` in RON, the range you'd buy in. Other currencies are converted at the National Bank of
+- **Budget:** `min_budget` / `max_budget` in the search's `currency` (RON by default; a car's in EUR stays
+  one as the rate moves), the range you'd buy in. Other currencies are converted at the National Bank of
   Romania's daily rates (BNR, `curs.bnr.ro`): fetched at most every 6 hours and kept in `settings`, so
   a failed fetch keeps the last ones; a new set also recalculates every stored listing's `price_ron`.
   No real rates are built in or set by hand: without a BNR rate (before the first fetch ever, or a
@@ -149,7 +152,7 @@ After that, each run reports listings it hasn't seen and drops of at least
   leave the price out of the search's link (OLX's price filter, eBay's `_udlo`/`_udhi`) and set it
   here instead: the platform never returns what its link filters out. Widening the budget later
   doesn't email the ads already stored.
-- **Prices:** `min_price` / `max_price` in RON, broader than the budget: what a real one of the
+- **Prices:** `min_price` / `max_price` in the search's `currency`, broader than the budget: what a real one of the
   product can cost. Ads outside them (games, controllers, cases at 100 lei; bundles far above) aren't
   stored, so they stay out of the price estimate too, unless `store_outside_prices` is 1 (default 0).
   `NULL`: no bound. (Before v15, `min_price`/`max_price` were the budget; the upgrade renames them.)
@@ -316,7 +319,7 @@ Run `--once` every 5 minutes:
 ## Database contract
 
 The monitor owns the schema. It creates the tables on start and adds new columns
-itself (`settings.schema_version`, now 20). Other apps may read everything and
+itself (`settings.schema_version`, now 21). Other apps may read everything and
 write only the columns marked ✎. All times are UTC `DATETIME`s. JSON columns hold
 text.
 
@@ -327,8 +330,9 @@ text.
 | `id`, `created_at`, `updated_at` | `updated_at` is set by whoever edits the row |
 | `platform` ✎ | A provider's `name` (`olx`, `vinted`); unknown ones fail with a clear `last_error` |
 | `name` ✎, `query_url` ✎ | What it's called; the results page to watch |
-| `min_budget` ✎, `max_budget` ✎ | The range to buy in (emailed, listed); RON, `NULL` for no bound |
-| `min_price` ✎, `max_price` ✎ | What a real one costs, broader than the budget: ads outside aren't stored; RON, `NULL` for no bound |
+| `currency` ✎ | What its budget and prices are in (`RON` by default; e.g. `EUR` for a car): converted to lei at BNR's rates on every check |
+| `min_budget` ✎, `max_budget` ✎ | The range to buy in (emailed, listed); in its `currency`, `NULL` for no bound |
+| `min_price` ✎, `max_price` ✎ | What a real one costs, broader than the budget: ads outside aren't stored; in its `currency`, `NULL` for no bound |
 | `store_outside_prices` ✎ | 1: store ads outside `min_price`/`max_price` too (default 0) |
 | `include_keywords` ✎, `exclude_keywords` ✎ | JSON lists of strings |
 | `options` ✎ | JSON object of platform-specific settings |
