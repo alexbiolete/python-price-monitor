@@ -8,7 +8,7 @@ options:   {"category_id": 1878}  optional; auto-detected from the page otherwis
 import re
 from collections import Counter
 from datetime import datetime
-from urllib.parse import parse_qsl, urlsplit
+from urllib.parse import parse_qsl, unquote, urlsplit
 
 from .base import Check, Listing, Provider, ProviderError, parse_iso_utc
 
@@ -22,6 +22,8 @@ MAX_PAGES = 3
 _IS_ACTIVE = re.compile(r'\\*"isActive\\*"\s*:\s*(true|false)')
 _REGULAR_PRICE = re.compile(r'\\*"regularPrice\\*"\s*:\s*\{\\*"value\\*"\s*:\s*([\d.]+)\s*,\s*\\*"currencyCode\\*"\s*:\s*\\*"([A-Z]+)')
 _SEARCH_KEY = re.compile(r"^search\[([^\]]+)\](.*)$")
+# A text search, in the page's path: /caini/q-samoyed/, /q-playstation-5/ (dashes for spaces)
+_PATH_QUERY = re.compile(r"/q-([^/]+)/?$")
 _CATEGORY_PATTERNS = [
     re.compile(r'\\*"category_id\\*"\s*:\s*\\*"?(\d+)'),
     re.compile(r'\\*"categoryId\\*"\s*:\s*\\*"?(\d+)'),
@@ -31,7 +33,8 @@ _CATEGORY_PATTERNS = [
 
 
 def page_url_to_params(page_url):
-    """Convert a listing page URL's query string into /api/v1/offers params."""
+    """Convert a listing page URL's query string, and the text searched for in its path
+    (/q-samoyed/), into /api/v1/offers params."""
     parts = urlsplit(page_url)  # the fragment is ignored
     params, has_sort = [], False
     for key, value in parse_qsl(parts.query, keep_blank_values=True):
@@ -46,6 +49,10 @@ def page_url_to_params(page_url):
                 continue
             key = name + rest  # search[filter_enum_model][0] -> filter_enum_model[0]
         params.append((key, value))
+    # The text searched for: the path's /q-.../ unless the query string already gives it
+    m = _PATH_QUERY.search(parts.path)
+    if m and not any(key in ("query", "q") for key, _ in params):
+        params.append(("query", unquote(m.group(1)).replace("-", " ").strip()))
     if not has_sort:
         params.append(("sort_by", "created_at:desc"))
     return params
