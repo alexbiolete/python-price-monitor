@@ -121,15 +121,42 @@ def plain(text):
     return "".join(c for c in text if not unicodedata.combining(c)).lower()
 
 
+QUOTE_MAX = 100  # characters of the ad's sentence quoted with a reason
+
+
+def _sentences(title, description):
+    """The title and the description's sentences (split after . ! ? and at line breaks), as written"""
+    parts = [title or ""] + re.split(r"(?<=[.!?])\s+|\n+", description or "")
+    return [p.strip() for p in parts if p and p.strip()]
+
+
+def _quote(sentence, phrase):
+    """The ad's own words around a phrase: its sentence, as written (diacritics kept), shortened around the
+    phrase when long; double quotes in it made single, so the reason's own quotes stay clear"""
+    text = re.sub(r"\s+", " ", sentence).replace('"', "'")
+    if len(text) <= QUOTE_MAX:
+        return text
+    at = plain(text).find(phrase)  # plain() keeps the length for Romanian (one letter per letter)
+    start = max(0, min(at - QUOTE_MAX // 3, len(text) - QUOTE_MAX)) if at >= 0 else 0
+    end = start + QUOTE_MAX
+    # Between words: from the start of a word, to the end of one
+    if start:
+        start = text.find(" ", start) + 1 or start
+    if end < len(text):
+        end = text.rfind(" ", start, end) if text.rfind(" ", start, end) > start else end
+    return ("…" if start else "") + text[start:end].strip() + ("…" if end < len(text) else "")
+
+
 def phrase_reasons(title, description, groups=None):
-    """One reason per kind of phrase found in the title or description (groups: PHRASES by default)"""
-    text = f" {plain(title)} {plain(description)} "
+    """One reason per kind of phrase found in the title or description (groups: PHRASES by default), with
+    the ad's own words quoted: 'offers to meet in person ("Ridicarea locală este posibilă.")'"""
+    sentences = [(sentence, f" {plain(sentence)} ") for sentence in _sentences(title, description)]
     found = []
     for reason, words in (groups or PHRASES).items():
-        for w in words:
-            if re.search(r"(?<![a-z])" + re.escape(w) + r"(?![a-z])", text):
-                found.append(f'{reason} ("{w}")')
-                break
+        hit = next(((sentence, w) for w in words for sentence, flat in sentences
+                    if re.search(r"(?<![a-z])" + re.escape(w) + r"(?![a-z])", flat)), None)
+        if hit:
+            found.append(f'{reason} ("{_quote(*hit)}")')
     return found
 
 

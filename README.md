@@ -183,6 +183,9 @@ Nothing is hidden: a flag means "look closer, and pay only through the platform"
 | One photo or none | 1 | Both |
 | No buyer protection (the ad doesn't offer the platform's delivery), when there's another sign and the ad doesn't offer to meet ("predare personală", "ridicare locală") | 1 | OLX |
 
+Every reason found in the ad's text quotes the seller's own sentence, as written (diacritics kept, a long
+one shortened around the phrase), e.g. *offers to meet in person ("Ridicarea locală este posibilă.")*.
+
 1 point is `low`, 2-3 `medium`, 4 or more `high`. Each kind of phrase counts once; an ad offering to meet
 can't be "only ships". Only these derived facts are stored, never who the seller is.
 

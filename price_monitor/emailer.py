@@ -24,14 +24,19 @@ SOFT = "#f4f4f5"
 GOOD = "#15803d"
 # The good signs' level as their box's heading (risk.good_signs: 1 point some, 2-3 good, 4+ very good)
 GOOD_LABELS = {"low": "Some good signs", "medium": "Good signs", "high": "Very good signs"}
-# The good signs' box (background, text): the greenest with no warning signs, fainter as they grow, the
-# faintest on a likely scam (good signs count for less there)
-GOOD_SHADES = {
-    None: ("#dcfce7", GOOD),
-    "low": ("#e5f9ec", "#3b8c58"),
-    "medium": ("#eef8f2", "#62a07b"),
-    "high": ("#f4f8f5", "#93b5a0"),
-}
+NOTE_INK = "#3f3f46"  # the "notes" box: grey, darker than MUTED to read on SOFT
+
+
+def _mix(a, b, share):
+    """Colour a, with `share` of it (0-1) and the rest of b: "#rrggbb" """
+    pa, pb = (tuple(int(c[k:k + 2], 16) for k in (1, 3, 5)) for c in (a, b))
+    return "#" + "".join(f"{round(x * share + y * (1 - share)):02x}" for x, y in zip(pa, pb))
+
+
+# The good signs' box (background, text), by the risk level: full green with no warning signs, then mixed
+# towards the notes' grey box (70%, 45%, 20% green), nearly grey on a likely scam
+GOOD_SHADES = {level: (_mix("#dcfce7", SOFT, share), _mix(GOOD, NOTE_INK, share))
+               for level, share in ((None, 1), ("low", 0.7), ("medium", 0.45), ("high", 0.2))}
 # The risk levels: yellow, orange, red (background, text, label)
 RISK_STYLE = {
     "low": ("#fef9c3", "#854d0e", "Slight risk"),
@@ -39,7 +44,6 @@ RISK_STYLE = {
     "high": ("#fee2e2", "#991b1b", "Likely scam"),
 }
 SHOWN_RISK = tuple(RISK_STYLE)
-NOTE_INK = "#3f3f46"  # the "notes" box: grey, darker than MUTED to read on SOFT
 # After the hidden preview text: blank characters, so inbox previews stop there instead of running
 # on into the email's first visible words (the title, "PRICE MONITOR")
 PREVIEW_STOP = "&#847;&zwnj;&nbsp;" * 90
