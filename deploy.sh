@@ -42,7 +42,7 @@ if [[ "${1:-}" == "--export" ]]; then
 fi
 
 if [[ "${1:-}" == "--remove" ]]; then
-  ssh "$HOST" "crontab -l 2>/dev/null | grep -vF '$CRON_TAG' | crontab -"
+  ssh "$HOST" "current=\$(crontab -l 2>/dev/null); printf '%s\\n' \"\$current\" | grep -vF '$CRON_TAG' | sed '/^\$/d' | crontab -"
   echo "Cron job removed."
   exit 0
 fi
@@ -68,7 +68,9 @@ ssh "$HOST" "cd ~/$REMOTE_DIR && { [ -x .venv/bin/python ] || $PYTHON -m venv .v
   && .venv/bin/pip install -q --disable-pip-version-check -r requirements.txt"
 
 echo "==> Installing cron jobs (the monitor, and the daily searches backup)"
-ssh "$HOST" "{ crontab -l 2>/dev/null | grep -vF '$CRON_TAG'; echo '$CRON_LINE'; echo '$BACKUP_LINE'; } | crontab -"
+# Read the crontab whole before writing it: piped straight into `crontab -` the read can come back
+# empty there, and every other job on the account (e.g. ~/bin/keep-alive.sh's) would be lost
+ssh "$HOST" "current=\$(crontab -l 2>/dev/null); { printf '%s\\n' \"\$current\" | grep -vF '$CRON_TAG'; echo '$CRON_LINE'; echo '$BACKUP_LINE'; } | sed '/^\$/d' | crontab -"
 ssh "$HOST" "crontab -l | grep -F '$CRON_TAG'"
 
 if [[ "${1:-}" == "--resend" ]]; then
