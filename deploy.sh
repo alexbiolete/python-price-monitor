@@ -8,7 +8,7 @@
 #
 # Re-run after changing the code or .env. Searches, intervals and on/off live in
 # the database (edit them in the dashboard), so changing those needs no deploy.
-# Server-only settings (MySQL credentials, cron schedule) live in .env.server and
+# Server-only settings (MySQL credentials, cron schedule) live in .env.production and
 # are appended to the remote .env; the local .env keeps using SQLite.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -21,7 +21,7 @@ CRON_TAG="# price-monitor"
 
 # How often cron wakes the monitor up. Each search's own interval (in the database)
 # decides whether it actually runs, so this is the finest interval you can use.
-CRON_SCHEDULE="$(grep -E '^CRON_SCHEDULE=' .env.server 2>/dev/null | tail -1 | cut -d= -f2- | tr -d "\"'" || true)"
+CRON_SCHEDULE="$(grep -E '^CRON_SCHEDULE=' .env.production 2>/dev/null | tail -1 | cut -d= -f2- | tr -d "\"'" || true)"
 CRON_SCHEDULE="${CRON_SCHEDULE:-*/5 * * * *}"
 [[ $(wc -w <<<"$CRON_SCHEDULE") -eq 5 ]] || { echo "CRON_SCHEDULE must have 5 fields, got: $CRON_SCHEDULE"; exit 1; }
 CRON_LINE="$CRON_SCHEDULE cd ~/$REMOTE_DIR && timeout 280 .venv/bin/python -W ignore -m price_monitor --once >> ~/$LOG 2>&1 $CRON_TAG"
@@ -33,14 +33,14 @@ if [[ "${1:-}" == "--remove" ]]; then
 fi
 
 [[ -f .env ]] || { echo "Missing .env (copy .env.example and fill it in)"; exit 1; }
-[[ -f .env.server ]] || { echo "Missing .env.server (MySQL settings for the server)"; exit 1; }
+[[ -f .env.production ]] || { echo "Missing .env.production (MySQL settings for the server)"; exit 1; }
 
 echo "==> Copying files to $HOST:~/$REMOTE_DIR"
 ssh "$HOST" "mkdir -p ~/$REMOTE_DIR/price_monitor/providers ~/logs"
-# Remote .env = local .env without the keys .env.server sets, then .env.server
+# Remote .env = local .env without the keys .env.production sets, then .env.production
 # (e.g. PLATFORMS=facebook locally, olx,vinted on the server)
-SERVER_KEYS="$(grep -oE '^[A-Z_][A-Z0-9_]*=' .env.server | tr -d = | paste -sd'|' -)"
-{ grep -vE "^(${SERVER_KEYS:-__none__})=" .env; echo; cat .env.server; } | ssh "$HOST" "umask 077 && cat > ~/$REMOTE_DIR/.env"
+SERVER_KEYS="$(grep -oE '^[A-Z_][A-Z0-9_]*=' .env.production | tr -d = | paste -sd'|' -)"
+{ grep -vE "^(${SERVER_KEYS:-__none__})=" .env; echo; cat .env.production; } | ssh "$HOST" "umask 077 && cat > ~/$REMOTE_DIR/.env"
 scp -q requirements.txt searches.example.json "$HOST:$REMOTE_DIR/"
 scp -q price_monitor/*.py "$HOST:$REMOTE_DIR/price_monitor/"
 scp -q price_monitor/providers/*.py "$HOST:$REMOTE_DIR/price_monitor/providers/"

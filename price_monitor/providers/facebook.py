@@ -98,7 +98,7 @@ class FacebookProvider(Provider):
                 "Facebook's session expired or was logged out: refresh FACEBOOK_COOKIES and deploy."
                 if self.logged_in else
                 "Facebook wants a login from this connection (it does from servers). Set FACEBOOK_COOKIES "
-                "(a logged-in session's cookies) in .env.server, or run Facebook from a home connection.")
+                "(a logged-in session's cookies) in .env.production, or run Facebook from a home connection.")
         if resp.status_code == 429:
             raise ProviderError("Facebook is rate-limiting this connection; try a longer interval")
         resp.raise_for_status()

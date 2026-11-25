@@ -152,7 +152,7 @@ It reads the results embedded in the page: one page per run (about 20 listings),
 ones skipped, posting dates exact, the seller's name not kept, and at most every 30 minutes.
 Facebook shows them to logged-out visitors only from some connections (a home one, not the
 server), so on the server it uses a logged-in session: put a browser's facebook.com cookies in
-`.env.server` as `FACEBOOK_COOKIES="c_user=...; xs=...; datr=..."` (ideally a spare account's:
+`.env.production` as `FACEBOOK_COOKIES="c_user=...; xs=...; datr=..."` (ideally a spare account's:
 automated use is against Facebook's terms, and a session used from a datacenter may get security
 checks or a lock), then `./deploy.sh`. When the session expires or Facebook asks for a check, the
 search's error says so in the dashboard.
@@ -195,7 +195,7 @@ ssh biolete.ro tail -f logs/cron-price-monitor.log
 
 - The server copy lives in `~/apps/price-monitor` and runs on Python 3.11 from
   `/opt/alt/python311`. It stores its data in the MySQL database `bioleter_price_monitor`.
-- The MySQL login and the cron schedule are in `.env.server` (local, not committed),
+- The MySQL login and the cron schedule are in `.env.production` (local, not committed),
   which `deploy.sh` adds to the server's `.env`. Locally the monitor uses SQLite.
 - Re-run `./deploy.sh` after changing the code or `.env`. Searches and settings
   live in the database, so changing them needs no deploy.
