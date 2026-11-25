@@ -23,6 +23,17 @@ def text(value, limit=None):
     return value[:limit] if limit else value
 
 
+# Tags that end a line in an ad's HTML description (OLX sends "line one<br />line two")
+LINE_BREAK = re.compile(r"<\s*(br|/?p|/?div|/?li|/?h[1-6])\b[^<>]*>", re.IGNORECASE)
+
+
+def lines(value):
+    """Plain text keeping its line breaks (an ad's description, split into sentences at them):
+    entities decoded, line-ending tags made line breaks, other tags removed, each line on one line."""
+    value = LINE_BREAK.sub("\n", html.unescape(str(value or "")).replace("\r\n", "\n").replace("\r", "\n"))
+    return "\n".join(line for line in (text(part) for part in value.split("\n")) if line)
+
+
 def url(value):
     """A web link (http or https), or None for anything else (javascript:, data:, ...)."""
     value = (value or "").strip()

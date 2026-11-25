@@ -12,6 +12,8 @@ import re
 import statistics
 import unicodedata
 
+from . import clean
+
 # Words that move a deal off the platform's protection, or ask for money first.
 # Matched without diacritics, in lowercase. Grouped so one listing gets one reason per kind.
 PHRASES = {
@@ -126,7 +128,7 @@ QUOTE_MAX = 100  # characters of the ad's sentence quoted with a reason
 
 def _sentences(title, description):
     """The title and the description's sentences (split after . ! ? and at line breaks), as written"""
-    parts = [title or ""] + re.split(r"(?<=[.!?])\s+|\n+", description or "")
+    parts = [title or ""] + re.split(r"(?<=[.!?])\s+|\n+", clean.lines(description))
     return [p.strip() for p in parts if p and p.strip()]
 
 
@@ -175,6 +177,18 @@ def static_signals(listing, platform):
     return s
 
 
+# Markup in a quote stored before descriptions were cleaned ("…fiscale<br />"), also cut off ("…<b…")
+QUOTED_TAG = re.compile(r"<[^<>]*>|<[a-zA-Z/][^<>\"]*(?=…)")
+
+
+def _without_markup(reason):
+    """A stored reason with no markup left in its quote (for listings stored before clean.lines)"""
+    if not isinstance(reason, str) or "<" not in reason:
+        return reason
+    reason = re.sub(r"\s+", " ", QUOTED_TAG.sub(" ", reason))
+    return re.sub(r'\s+(…?"\))$', r"\1", reason.replace('(" ', '("'))
+
+
 def with_title_phrases(signals, title):
     """Stored signals (read from an item page once, e.g. Vinted's) plus what the current phrase lists find
     in the title: a kind already there stays as it was (it may have come from the description, which
@@ -182,10 +196,10 @@ def with_title_phrases(signals, title):
     s = dict(signals)
     # Offers to meet: stored as the phrase found (a list; before, a bool), else what the title shows
     meets = s.get("meets")
-    s["meets"] = meets if isinstance(meets, list) and meets else phrase_reasons(title, "", MEET_PHRASES) or bool(meets)
+    s["meets"] = [_without_markup(r) for r in meets] if isinstance(meets, list) and meets else phrase_reasons(title, "", MEET_PHRASES) or bool(meets)
     for key, groups in (("phrases", PHRASES), ("rush", RUSH_PHRASES), ("messaging", NOTE_PHRASES),
                         ("negotiable", NEGOTIABLE_PHRASES), ("fixed_price", FIXED_PRICE_PHRASES)):
-        have = list(s.get(key) or [])
+        have = [_without_markup(r) for r in s.get(key) or []]
         kinds = {r.split(" (", 1)[0] for r in have}
         have += [r for r in phrase_reasons(title, "", groups) if r.split(" (", 1)[0] not in kinds]
         s[key] = have
