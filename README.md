@@ -228,7 +228,7 @@ the item was uploaded, which tightens the age check.
 
 | `platform` | Link to paste as `query_url` | Notes |
 |---|---|---|
-| `olx` | An OLX.ro results page with your filters set | Uses the JSON endpoint the site loads results from. The category is detected from the page once; set `{"category_id": N}` in `options` to fix it |
+| `olx` | An OLX.ro results page with your filters set | Uses the JSON endpoint the site loads results from. The category is detected from the page once; set `{"category_id": N}` in `options` to fix it. A text search in the link's path (`/caini/q-samoyed/`) is searched for too. Some filters' values differ from the link's path (the BMW 3 Series is `filter_enum_model` `3-as-sorozat`, not `seria-3`): copy them from a results page with the filter ticked |
 | `vinted` | A Vinted catalog page (`https://www.vinted.ro/catalog?...`) | Reads the results embedded in the page, and the item page for new matches (see Possible scams). Its "newest first" isn't strict, so ages are estimated from item ids, and the item page's upload date wins when it's older. Prices include the buyer protection fee (`{"price": "item"}` in `options` for the seller's price). vinted.ro also shows items from Poland, Greece and more, so add keywords in those languages where needed |
 
 `publi24`: a Publi24 search (`https://www.publi24.ro/anunturi/?q=playstation+5`). It reads the
