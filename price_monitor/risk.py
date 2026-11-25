@@ -36,9 +36,37 @@ PHRASES = {
         "doar expediere", "nu predau personal", "fara predare personala", "nu ma intalnesc", "nu fac intalniri",
         "fara intalnire", "only shipping", "only by courier", "only delivery", "no meetings", "tylko wysyłka",
     ],
+    "delivers only by courier, outside the platform": [
+        "doar prin fan courier", "numai prin fan courier", "doar cu fan courier", "doar prin fan", "doar prin sameday",
+        "doar prin cargus", "doar prin dpd", "doar prin gls", "doar prin posta", "doar prin easybox",
+        "livrarea este disponibila doar prin", "livrare doar prin", "expediez doar prin",
+    ],
     "says they're abroad": [
         "sunt in strainatate", "nu sunt in tara", "sunt plecat din tara", "ma aflu in strainatate",
         "lucrez in strainatate", "plecat in strainatate", "i am abroad", "im abroad",
+    ],
+}
+
+# The points each kind adds: what takes the deal off the platform's protection, or asks for money first,
+# weighs most; a courier of their own (with a meeting still possible) least
+PHRASE_POINTS = {
+    "asks for payment in advance": 3,
+    "sends a payment link or code": 3,
+    "asks for a money transfer": 2,
+    "only ships, no meeting": 2,
+    "says they're abroad": 2,
+    "delivers only by courier, outside the platform": 1,
+}
+
+# Offers to meet (a handover in person, a local pickup): then the missing buyer protection isn't held
+# against it (the buyer can see it before paying), and "only ships" can't be right
+MEET_PHRASES = {
+    "offers to meet": [
+        "predare personala", "predarea personala", "predare in mana", "predarea in mana", "predare pe loc",
+        "ridicare locala", "ridicarea locala", "ridicare personala", "ridicarea personala", "se poate ridica",
+        "ridicare din", "ridicarea din", "ma pot intalni", "intalnire in", "vin la tine", "testare la predare",
+        "verificare la predare", "personal pickup", "local pickup", "pick up in person", "odbior osobisty",
+        "odbiór osobisty", "παραδοση χερι",
     ],
 }
 
@@ -53,8 +81,7 @@ NOTE_PHRASES = {
 # Before, a messaging app was a scored phrase of this kind; stored signals may still carry it
 OLD_MESSAGING_REASON = "wants to talk on WhatsApp or Telegram"
 
-# Milder: pushing for a quick sale. Honest sellers write "vand urgent" too, so it's 1 point (alone: a
-# slight risk), on top of the signs above. Same matching.
+# Pushing for a quick sale ("urgent"): 2 points, a possible scam on its own. Same matching.
 RUSH_PHRASES = {
     "pushes for a quick sale": [
         "urgent", "urgenta", "vand repede", "doar azi", "azi doar", "numai azi", "pana diseara",
@@ -96,6 +123,7 @@ def static_signals(listing, platform):
     s["phrases"] = phrase_reasons(listing.title, description)
     s["rush"] = phrase_reasons(listing.title, description, RUSH_PHRASES)
     s["messaging"] = phrase_reasons(listing.title, description, NOTE_PHRASES)
+    s["meets"] = bool(phrase_reasons(listing.title, description, MEET_PHRASES))
     return s
 
 
@@ -104,6 +132,7 @@ def with_title_phrases(signals, title):
     in the title: a kind already there stays as it was (it may have come from the description, which
     isn't stored), a kind the title shows now is added. So new rules reach listings stored before them."""
     s = dict(signals)
+    s["meets"] = bool(s.get("meets")) or bool(phrase_reasons(title, "", MEET_PHRASES))
     for key, groups in (("phrases", PHRASES), ("rush", RUSH_PHRASES), ("messaging", NOTE_PHRASES)):
         have = list(s.get(key) or [])
         kinds = {r.split(" (", 1)[0] for r in have}
@@ -118,12 +147,14 @@ def typical_price(prices):
     return statistics.median(prices) if len(prices) >= MIN_COMPARABLES else None
 
 
+RUSH_POINTS = 2
+
+
 def assess(signals, price_ron, typical, fmt_price):
-    """(level or None, score, reasons, notes) for a listing. A seller with no reviews yet adds its
-    point, but alone it gives no level: it's only a note (a grey mention), shown when there's no
-    level. A level needs at least one other sign. A messaging app (WhatsApp...) is a note with no points."""
+    """(level or None, score, reasons, notes) for a listing. reasons: the warning signs, each with points,
+    which give the level; notes: worth knowing, no points (no reviews yet, a messaging app, the same
+    photo on other ads), shown on their own, before the warning signs."""
     score, reasons, notes = 0, [], []
-    weak = 0  # points that alone give no level
 
     if typical:
         ratio = price_ron / typical
@@ -144,9 +175,6 @@ def assess(signals, price_ron, typical, fmt_price):
 
     reviews = signals.get("seller_reviews")
     if reviews == 0:
-        score += 1
-        weak += 1
-        reasons.append("seller has no reviews")
         notes.append("seller has no reviews yet")
     elif reviews and reviews >= 3 and signals.get("seller_rating") is not None and signals["seller_rating"] < 0.8:
         score += 1
@@ -157,21 +185,17 @@ def assess(signals, price_ron, typical, fmt_price):
         score += 1
         reasons.append(f"seller has {negative} negative reviews out of {reviews}")
 
-    phrases = [p for p in signals.get("phrases") or [] if not p.startswith(OLD_MESSAGING_REASON)]
-    score += 2 * min(len(phrases), 2)
-    reasons += phrases
+    meets = bool(signals.get("meets"))
+    for phrase in signals.get("phrases") or []:
+        kind = phrase.split(" (", 1)[0]
+        if kind == OLD_MESSAGING_REASON or (meets and kind == "only ships, no meeting"):
+            continue  # a messaging app is a note (below); offering to meet contradicts "only ships"
+        score += PHRASE_POINTS.get(kind, 2)
+        reasons.append(phrase)
 
-    # A messaging app: a note, no points (also when stored as the old scored phrase)
-    old = [p.replace(OLD_MESSAGING_REASON, "mentions WhatsApp or Telegram", 1)
-           for p in signals.get("phrases") or [] if p.startswith(OLD_MESSAGING_REASON)]
-    for note in (signals.get("messaging") or old)[:1]:
-        reasons.append(note)
-        notes.append(note)
-
-    rush = signals.get("rush") or []
-    if rush:
-        score += 1
-        reasons += rush
+    for phrase in (signals.get("rush") or [])[:1]:
+        score += RUSH_POINTS
+        reasons.append(phrase)
 
     if signals.get("contact_in_text"):
         score += 2
@@ -182,11 +206,19 @@ def assess(signals, price_ron, typical, fmt_price):
         score += 1
         reasons.append("only one photo" if photos == 1 else "no photos")
 
-    if signals.get("unprotected") and score > weak:
+    if signals.get("unprotected") and score > 0 and not meets:
         score += 1
         reasons.append("no buyer protection")
 
-    level = next((name for minimum, name in LEVELS if score >= minimum), None) if score > weak else None
+    # Notes: a messaging app (also when stored as the old scored phrase), the same photo on other ads
+    old = [p.replace(OLD_MESSAGING_REASON, "mentions WhatsApp or Telegram", 1)
+           for p in signals.get("phrases") or [] if p.startswith(OLD_MESSAGING_REASON)]
+    notes += (signals.get("messaging") or old)[:1]
+    same_photo = signals.get("same_photo_ads") or 0
+    if same_photo:
+        notes.append(f"same photo as {same_photo} other ad{'s' if same_photo != 1 else ''} (copied or reposted)")
+
+    level = next((name for minimum, name in LEVELS if score >= minimum), None)
     return level, score, reasons, notes
 
 

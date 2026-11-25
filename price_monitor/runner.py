@@ -81,6 +81,9 @@ def due_searches(searches, settings, now):
 SELLER_KEYS = ("seller_reviews", "seller_rating", "seller_negative_reviews")
 
 
+SAME_PHOTO_MAX = 10  # more ads than this with one photo: a placeholder image, not a copy
+
+
 def process(db, search, listings, platform_label, now, drop_min_pct, max_age_days=None,
             provider=None, spec=None):
     """Store matching listings, flag possible scams; return what to report. Listings outside the
@@ -134,11 +137,20 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
     # 2. What's typical here: the median of everything in the range (for "far below the typical price")
     typical = risk.typical_price([p for l, p, in_budget in candidates if in_budget and not is_old(l)])
     rows = {r["external_id"]: r for r in db.all(
-        "SELECT id, external_id, price, currency, risk_signals, pin_order, inactive_at, excluded_at FROM listings"
+        "SELECT id, external_id, price, currency, risk_signals, pin_order, inactive_at, excluded_at, marked_suspicious_at FROM listings"
         " WHERE search_id = ?",
         (search["id"],))}
     # The photos of ads excluded in the dashboard, on this platform: an ad posted again under a new id
     # with the same photo (a bot reposting a bad ad, Vinted keeps the photo's address) is excluded too
+    # Every ad's photo on this platform (and this run's), to note one whose photo other ads use too (a
+    # copied photo, or the same ad posted again). A photo on very many ads is a placeholder, not counted
+    photo_ads = {}
+    for r in db.all("SELECT image_url, external_id FROM listings WHERE platform = ? AND image_url IS NOT NULL",
+                    (search["platform"],)):
+        photo_ads.setdefault(r["image_url"], set()).add(r["external_id"])
+    for l, _, _ in candidates:
+        if l.image_url:
+            photo_ads.setdefault(l.image_url, set()).add(l.external_id)
     excluded_photos = {r["image_url"] for r in db.all(
         "SELECT DISTINCT image_url FROM listings WHERE platform = ? AND excluded_at IS NOT NULL"
         " AND image_url IS NOT NULL", (search["platform"],))}
@@ -174,6 +186,8 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
                     seller_budget -= 1
                     stats["sellers"] += 1
                     signals.update(provider.seller_signals(l) or {})
+        others = len(photo_ads.get(l.image_url, ()) - {l.external_id}) if l.image_url else 0
+        signals["same_photo_ads"] = others if others <= SAME_PHOTO_MAX else 0
         level, score, reasons, notes = risk.assess(signals, price_ron, typical, fmt)
         old = is_old(l)  # after its page: that can show it's older than the id said
         stats["too_old" if old else "matching" if in_budget else "outside_budget"] += 1
@@ -216,7 +230,8 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
                        (row["id"], l.price, l.currency, stamp, "rate" if by_rate else None))
             if l.currency == row["currency"] and row["price"] > 0 and not by_rate:
                 drop_pct = (row["price"] - l.price) / row["price"] * 100
-                if in_budget and not old and drop_pct >= drop_min_pct and not is_baseline and search["notify_price_drops"]:
+                if in_budget and not old and drop_pct >= drop_min_pct and not is_baseline and search["notify_price_drops"] \
+                        and row["marked_suspicious_at"] is None:  # marked suspicious in the dashboard: not emailed
                     drops.append({**item, "old_price": row["price"], "drop_pct": drop_pct})
         db.execute(
             "UPDATE listings SET title = ?, url = ?, image_url = ?, price = ?, currency = ?,"

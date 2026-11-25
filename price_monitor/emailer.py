@@ -68,18 +68,20 @@ def wordmark():
 
 
 def _listing_row(item, price_html):
-    thumb = ""
-    if item.get("image_url"):
-        thumb = (f'<td style="padding:10px 10px 10px 0;border-top:1px solid {LINE};width:48px;vertical-align:top">'
-                 f'<img src="{esc(item["image_url"])}" width="48" height="48" alt="" '
-                 f'style="display:block;width:48px;height:48px;border-radius:8px;object-fit:cover;background:{SOFT}"></td>')
+    # Always a photo cell (a grey square without one): rows with and without photos share one table, so a
+    # missing cell would push the title into the narrow photo column of the rows around it
+    photo = (f'<img src="{esc(item["image_url"])}" width="48" height="48" alt="" '
+             f'style="display:block;width:48px;height:48px;border-radius:8px;object-fit:cover;background:{SOFT}">'
+             if item.get("image_url") else
+             f'<div style="width:48px;height:48px;border-radius:8px;background:{SOFT}"></div>')
+    thumb = f'<td style="padding:10px 10px 10px 0;border-top:1px solid {LINE};width:48px;vertical-align:top">{photo}</td>'
     meta = " · ".join(x for x in (item.get("location"), item.get("platform_label")) if x)
     return (
         "<tr>" + thumb +
         f'<td style="padding:10px 0;border-top:1px solid {LINE};vertical-align:top">'
         f'<a href="{esc(item["url"])}" style="color:{INK};font-size:14px;font-weight:600;line-height:1.4;text-decoration:none">{esc(item["title"])}</a>'
         + (f'<div style="margin-top:2px;color:{MUTED};font-size:12px">{esc(meta)}</div>' if meta else "")
-        + _risk_html(item) + _notes_html(item)
+        + _notes_html(item) + _risk_html(item)
         + f'<div style="margin-top:4px"><a href="{esc(item["url"])}" style="color:{ACCENT};font-size:12px;font-weight:600;text-decoration:none">View listing →</a></div>'
         "</td>"
         f'<td align="right" style="padding:10px 0 10px 10px;border-top:1px solid {LINE};vertical-align:top;white-space:nowrap;font-size:14px;color:{INK}">{price_html}</td>'
@@ -87,25 +89,32 @@ def _listing_row(item, price_html):
     )
 
 
+def _capitalized(text):
+    return text[:1].upper() + text[1:]
+
+
+def _box(heading, items, background, ink):
+    """A rounded box: its heading on one line, then one bullet per item (as the dashboard's view)"""
+    bullets = "".join(f'<li style="margin:2px 0">{esc(_capitalized(x))}</li>' for x in items)
+    return (f'<div style="margin-top:6px;padding:8px 12px;border-radius:10px;background:{background};color:{ink};font-size:12px;line-height:1.45">'
+            f'<div style="font-weight:700">{heading}</div>'
+            f'<ul style="margin:4px 0 0;padding-left:18px">{bullets}</ul></div>')
+
+
 def _risk_html(item):
+    """The warning signs (each with points), under the notes: the level's colour, its name, the signs"""
     level, reasons = item.get("risk_level"), item.get("risk_reasons") or []
     if level not in SHOWN_RISK or not reasons:
         return ""
     bg, ink, label = RISK_STYLE[level]
-    return (f'<div style="margin-top:6px;padding:6px 10px;border-radius:10px;background:{bg};color:{ink};font-size:12px;line-height:1.45">'
-            f'<b>⚠ {label}:</b> {esc("; ".join(reasons))}</div>')
+    return _box(f"⚠ {esc(label)}", reasons, bg, ink)
 
 
 def _notes_html(item):
-    """Notes (a seller with no reviews yet, a messaging app in the ad), milder than a risk level: a grey
-    box like the risk levels' ones (the dashboard's "Notes"), when the listing has no risk level (a
-    level's reasons include the notes)"""
+    """Notes: worth knowing, no points (no reviews yet, a messaging app, the same photo on other ads), in a
+    grey box before the warning signs (the dashboard's "Notes")"""
     notes = item.get("risk_notes") or []
-    if not notes or (item.get("risk_level") in SHOWN_RISK and item.get("risk_reasons")):
-        return ""
-    text = "; ".join(notes)
-    return (f'<div style="margin-top:6px;padding:6px 10px;border-radius:10px;background:{SOFT};color:{NOTE_INK};font-size:12px;line-height:1.45">'
-            f'<b>ⓘ Notes:</b> {esc(text)}</div>')
+    return _box("ⓘ Notes", notes, SOFT, NOTE_INK) if notes else ""
 
 
 def _detail_html(item):
@@ -117,11 +126,12 @@ def _detail_html(item):
 
 
 def _risk_text(item):
-    if item.get("risk_level") in SHOWN_RISK and item.get("risk_reasons"):
-        return f"\n      ⚠ {RISK_STYLE[item['risk_level']][2]}: {'; '.join(item['risk_reasons'])}"
+    text = ""
     if item.get("risk_notes"):
-        return f"\n      ⓘ Notes: {'; '.join(item['risk_notes'])}"
-    return ""
+        text += f"\n      ⓘ Notes: {'; '.join(item['risk_notes'])}"
+    if item.get("risk_level") in SHOWN_RISK and item.get("risk_reasons"):
+        text += f"\n      ⚠ {RISK_STYLE[item['risk_level']][2]}: {'; '.join(item['risk_reasons'])}"
+    return text
 
 
 def _section(title, rows):

@@ -164,31 +164,34 @@ After that, each run reports listings it hasn't seen and drops of at least
 ### Possible scams
 
 Every listing gets a risk level (`low`, `medium`, `high`) from warning signs
-([`risk.py`](price_monitor/risk.py)). The email shows each with its reasons, in yellow
-(*"Slight risk"*), orange (*"Possible scam"*) or red, e.g. *"⚠ Likely scam: seller account
-3 days old; only one photo"*.
+([`risk.py`](price_monitor/risk.py)), each worth points. The email shows the level with its signs in
+yellow (*"Slight risk"*), orange (*"Possible scam"*) or red (*"Likely scam"*), one per line.
 Nothing is hidden: a flag means "look closer, and pay only through the platform".
 
 | Sign | Points | Where it comes from |
 |---|---|---|
 | Price 35% or more below the search's typical price (the median of its current matches, 5 or more) | 2 (3 at half or less) | Both |
 | Seller account under 30 days old (under 7 days: 3) | 2 | OLX |
-| Seller with no reviews, or rated under 4/5 | 1 | Vinted (item page), eBay, OLX (its ratings service) |
+| Seller rated under 4/5 (3 reviews or more) | 1 | Vinted (item page), eBay, OLX (its ratings service) |
 | 2 or more negative reviews, a tenth of them or more (OLX: 1-2 stars) | 1 | Vinted, OLX |
-| Phrases: payment in advance, money transfers (IBAN, Revolut, crypto, gift cards), payment links or card codes, "only by courier" / no meeting, "I'm abroad" | 2 each, up to 2 kinds | Title and description, in Romanian, English, Polish and Greek ([`risk.py`](price_monitor/risk.py)) |
-| Mentions WhatsApp, Telegram or Viber (also "wapp", wa.me and t.me links): honest sellers do it too, but it's where deals leave the platform | 0: a note | Title and description |
-| Rushing the sale: "urgent", "doar azi" (today only), "primul venit" (first come), "plec din țară" | 1 | Title and description; mild, since honest sellers write "vând urgent" too |
+| Asks for payment in advance; sends a payment link or asks for a card code | 3 each | Title and description, in Romanian, English, Polish and Greek |
+| Asks for a money transfer (IBAN, Revolut, crypto, gift cards); only ships, no meeting; says they're abroad | 2 each | The same |
+| Pushes for a quick sale: "urgent", "doar azi" (today only), "primul venit" (first come), "plec din țară" | 2 | The same |
+| Delivers only by its own courier, outside the platform ("livrarea doar prin Fan Courier") | 1 | The same |
 | A phone number or email in the ad (to talk off the platform) | 2 | Vinted |
 | One photo or none | 1 | Both |
-| No buyer protection (the ad doesn't offer the platform's delivery), when there's another sign | 1 | OLX |
+| No buyer protection (the ad doesn't offer the platform's delivery), when there's another sign and the ad doesn't offer to meet ("predare personală", "ridicare locală") | 1 | OLX |
 
-1 point is `low`, 2-3 `medium`, 4 or more `high`. Only these derived facts are
-stored, never who the seller is.
+1 point is `low`, 2-3 `medium`, 4 or more `high`. Each kind of phrase counts once; an ad offering to meet
+can't be "only ships". Only these derived facts are stored, never who the seller is.
 
-A seller with no reviews yet adds its point, but alone it gives no level: only a grey
-*"ⓘ Notes: seller has no reviews yet"* under the listing (`risk_notes`), next to any other notes, such as
-a messaging app in the ad. With any other sign it counts
-toward the level, and the level's reasons include it.
+**Notes** are worth knowing but add no points, and are shown on their own, before the warning signs
+(`risk_notes`, a grey *"ⓘ Notes"* box): a seller with no reviews yet, a messaging app in the ad (WhatsApp,
+Telegram, Viber, also "wapp" and wa.me / t.me links), and the same photo on other ads of the platform (a
+copied photo, or the ad posted again; a photo on more than 10 ads is a placeholder and doesn't count).
+
+A listing marked suspicious in the dashboard (`listings.marked_suspicious_at`) shows as a likely scam whatever its
+signs, and its price drops aren't emailed.
 
 OLX's seller ratings (what an ad's page shows, e.g. *"5.0 / 5, 18 ratinguri"*) come from its
 public ratings service by the seller's id, looked up once per listing (at most 40 per search per
@@ -292,7 +295,7 @@ Run `--once` every 5 minutes:
 ## Database contract
 
 The monitor owns the schema. It creates the tables on start and adds new columns
-itself (`settings.schema_version`, now 16). Other apps may read everything and
+itself (`settings.schema_version`, now 17). Other apps may read everything and
 write only the columns marked ✎. All times are UTC `DATETIME`s. JSON columns hold
 text.
 
@@ -334,7 +337,8 @@ or `NULL`), `risk_score`, `risk_reasons` (JSON list of sentences) and
 mention even when the listing isn't flagged, e.g. "seller has no reviews yet"; show them when not
 showing the flag; `NULL`: none), `price_detail` (how `price` adds up, for
 eBay's totals), and `pin_order` ✎: pinned in the dashboard, in this order (lower first; `NULL`: not
-pinned), and `excluded_at` ✎: when it was excluded in the dashboard (left out of price estimates, listed
+pinned), `marked_suspicious_at` ✎: when it was marked suspicious in the dashboard (shown as a likely scam; its
+price drops aren't emailed; `NULL`: not marked), and `excluded_at` ✎: when it was excluded in the dashboard (left out of price estimates, listed
 last; `NULL`: not excluded). The monitor never deletes a pinned or excluded listing, and
 `--resend-all` keeps them. An ad posted again under a new id with the same photo as an excluded ad on
 its platform (bots repost bad ads this way; Vinted keeps the photo's address) is stored excluded and
