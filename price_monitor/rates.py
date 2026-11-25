@@ -58,15 +58,22 @@ def parse_bnr(xml):
     return (rates or None), (date.group(1) if date else None)
 
 
-def refresh(db, now):
-    """Use the stored rates; fetch BNR's when they're missing or older than REFRESH_EVERY, store
-    them, and work out every stored listing's price in lei again with them."""
+def load(db):
+    """Use the stored rates (nothing fetched); returns the settings row they came from."""
     global _live
     row = db.one("SELECT exchange_rates, exchange_rates_at FROM settings WHERE id = 1") or {}
     try:
         _live = json.loads(row.get("exchange_rates") or "{}").get("rates") or {}
     except ValueError:
         _live = {}
+    return row
+
+
+def refresh(db, now):
+    """Use the stored rates; fetch BNR's when they're missing or older than REFRESH_EVERY, store
+    them, and work out every stored listing's price in lei again with them."""
+    global _live
+    row = load(db)
     fetched = from_db_time(row.get("exchange_rates_at"))
     if fetched and now - fetched < REFRESH_EVERY:
         return

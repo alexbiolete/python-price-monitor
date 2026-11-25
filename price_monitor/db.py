@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 20
+SCHEMA_VERSION = 21
 
 # Columns added after the first version: (table, column, MySQL type, SQLite type).
 # Added on start when missing, so an existing database upgrades itself.
@@ -79,6 +79,9 @@ ADDED_COLUMNS = [
     # v20: the ad's description, plain text with its line breaks (clean.lines; NULL: the platform gives none,
     # or it was stored before v20), for the dashboard and for --rescore's phrase rules
     ("listings", "description", "TEXT NULL", "TEXT"),
+    # v21: the currency a search's budget and prices are in (RON by default); each check converts them to
+    # lei at its BNR rates, so a budget in euro stays one as the rate moves
+    ("searches", "currency", "VARCHAR(3) NOT NULL DEFAULT 'RON'", "TEXT NOT NULL DEFAULT 'RON'"),
 ]
 
 # Columns renamed since: (table, old name, new name), renamed in place on start, before the above

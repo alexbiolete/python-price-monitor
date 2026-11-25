@@ -19,6 +19,7 @@
 import json
 import logging
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -55,15 +56,18 @@ def import_searches(db, path):
         if db.one("SELECT id FROM searches WHERE platform = ? AND name = ?", (platform, s["name"])):
             log.info("Skipping %s (%s): already exists", s["name"], platform)
             continue
+        currency = (s.get("currency") or "RON").strip().upper()
+        if not re.fullmatch(r"[A-Z]{3}", currency):
+            raise SystemExit(f"{path}: {s['name']}: currency must be a 3-letter code such as RON or EUR, not {currency!r}")
         options = s.get("options") or {}
         if s.get("category_id"):
             options["category_id"] = s["category_id"]
         db.execute(
-            "INSERT INTO searches (platform, name, query_url, min_budget, max_budget, min_price, max_price,"
+            "INSERT INTO searches (platform, name, query_url, currency, min_budget, max_budget, min_price, max_price,"
             " store_outside_prices, include_keywords, exclude_keywords, options, enabled, show_listings,"
             " notify_new, notify_price_drops, interval_minutes, max_age_days, sort_order)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (platform, s["name"], url, s.get("min_budget"), s.get("max_budget"), s.get("min_price"), s.get("max_price"),
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (platform, s["name"], url, currency, s.get("min_budget"), s.get("max_budget"), s.get("min_price"), s.get("max_price"),
              1 if s.get("store_outside_prices") else 0,
              json.dumps(s.get("include_keywords") or [], ensure_ascii=False),
              json.dumps(s.get("exclude_keywords") or s.get("exclude") or [], ensure_ascii=False),
@@ -79,7 +83,7 @@ def import_searches(db, path):
 
 # The search settings an export keeps, in --import's field names (not the monitor's own state: last
 # run, baseline, provider_state); JSON columns are written as JSON
-EXPORT_FIELDS = ["name", "platform", "query_url", "min_budget", "max_budget", "min_price", "max_price",
+EXPORT_FIELDS = ["name", "platform", "query_url", "currency", "min_budget", "max_budget", "min_price", "max_price",
                  "store_outside_prices", "include_keywords", "exclude_keywords", "options", "enabled", "show_listings",
                  "notify_new", "notify_price_drops", "interval_minutes", "max_age_days", "sort_order"]
 BOOL_FIELDS = {"store_outside_prices", "enabled", "show_listings", "notify_new", "notify_price_drops"}

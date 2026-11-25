@@ -82,6 +82,13 @@ SELLER_KEYS = ("seller_reviews", "seller_rating", "seller_negative_reviews")
 
 
 SAME_PHOTO_MAX = 10  # more ads than this with one photo: a placeholder image, not a copy
+
+
+def search_limits(search, low_key, high_key):
+    """Two of a search's limits (its budget, or its prices) in lei: they're in its currency (v21; RON by
+    default), converted at the current BNR rates. None: no limit."""
+    rate = rates.rate_to_ron(search.get("currency") or "RON")
+    return tuple(None if search.get(k) is None else search[k] * rate for k in (low_key, high_key))
 DESCRIPTION_MAX = 10000  # characters of an ad's description stored
 
 
@@ -96,10 +103,10 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
     is_old = lambda l: bool(oldest and l.posted_at and l.posted_at < oldest)  # noqa: E731
     includes = [k.lower() for k in json_list(search["include_keywords"]) if k.strip()]
     excludes = [k.lower() for k in json_list(search["exclude_keywords"]) if k.strip()]
-    lo, hi = search["min_budget"], search["max_budget"]
+    lo, hi = search_limits(search, "min_budget", "max_budget")
     # Its prices: outside them it's not the product (a game, a case, a part), so it isn't stored, unless
     # the search stores those too
-    min_price, max_price = search.get("min_price"), search.get("max_price")
+    min_price, max_price = search_limits(search, "min_price", "max_price")
     skip_outside_prices = not search.get("store_outside_prices")
     stamp = to_db_time(now)
     state = spec.state if spec is not None else {}
@@ -265,13 +272,14 @@ def rescore(db, now=None):
     age limit). For after the rules change; nothing is read from the platforms. Returns how many changed."""
     now = now or utcnow()
     settings = db.one("SELECT default_max_age_days FROM settings WHERE id = 1") or {}
+    rates.load(db)  # for budgets in other currencies (nothing fetched)
     fmt = lambda amount: fmt_price(amount, "RON")  # noqa: E731
     changed = 0
     for search in db.all("SELECT * FROM searches"):
         rows = db.all("SELECT * FROM listings WHERE search_id = ?", (search["id"],))
         max_age = search.get("max_age_days") or settings.get("default_max_age_days")
         oldest = now - timedelta(days=max_age) if max_age else None
-        lo, hi = search.get("min_budget"), search.get("max_budget")
+        lo, hi = search_limits(search, "min_budget", "max_budget")
         in_budget = lambda r: r["price_ron"] is not None and (lo is None or r["price_ron"] >= lo) \
             and (hi is None or r["price_ron"] <= hi)  # noqa: E731
         typical = risk.typical_price([r["price_ron"] for r in rows if in_budget(r) and r["inactive_at"] is None
