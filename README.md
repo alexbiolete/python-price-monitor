@@ -83,7 +83,8 @@ After that, each run reports listings it hasn't seen and drops of at least
 - **Must contain** (`include_keywords`): the title has to contain at least one of
   these. Useful on Vinted, whose search also returns loosely related items.
 - **Leave out** (`exclude_keywords`): titles containing any of these are skipped.
-- **Age** (`max_age_days`, default 30): older ads are skipped. OLX gives the
+- **Age** (`max_age_days`, default 30): older ads are stored (for the price estimate and the
+  dashboard's age filter) but never emailed, and get item pages only after fresh ones. OLX gives the
   posting date. Vinted doesn't, so it's estimated from the item id (ids only
   grow, about 15 million a day); close for days and weeks.
 - Ads without a price (swap-only) are skipped.

@@ -79,16 +79,17 @@ def due_searches(searches, settings, now):
 
 
 SELLER_KEYS = ("seller_reviews", "seller_rating", "seller_negative_reviews")
-SKIP_MEMO = 1000  # old items whose page we've read, remembered per search so it isn't read again
 
 
 def process(db, search, listings, platform_label, now, drop_min_pct, max_age_days=None,
             provider=None, spec=None):
     """Store matching listings, flag possible scams; return what to report. Listings outside the
-    search's budget are stored too (for the price estimate), but never reported: the
-    dashboard shows the ones whose price_ron is in the range."""
+    search's budget, and ones older than its age limit, are stored too (for the price estimate and
+    the dashboard's age filter), but never reported: only fresh ones in the budget are."""
     is_baseline = search["baseline_at"] is None
     oldest = now - timedelta(days=max_age_days) if max_age_days else None
+    # Older than the age limit: stored, never reported (an ad without a date counts as fresh)
+    is_old = lambda l: bool(oldest and l.posted_at and l.posted_at < oldest)  # noqa: E731
     includes = [k.lower() for k in json_list(search["include_keywords"]) if k.strip()]
     excludes = [k.lower() for k in json_list(search["exclude_keywords"]) if k.strip()]
     lo, hi = search["min_budget"], search["max_budget"]
@@ -98,7 +99,7 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
     skip_outside_prices = not search.get("store_outside_prices")
     stamp = to_db_time(now)
     state = spec.state if spec is not None else {}
-    skipped_old = set(state.get("skipped_old") or [])
+    state.pop("skipped_old", None)  # ads over the age limit used to be skipped, and remembered here
     stats = {"matching": 0, "filtered": 0, "outside_budget": 0, "no_price": 0, "too_old": 0, "pages": 0, "sellers": 0,
              "same_photo": 0, "outside_prices": 0}
     fmt = lambda amount: fmt_price(amount, "RON")  # noqa: E731
@@ -115,9 +116,6 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
             stats["filtered"] += 1  # no web link to it
             continue
         seen.add(l.external_id)
-        if l.external_id in skipped_old or (oldest and l.posted_at and l.posted_at < oldest):
-            stats["too_old"] += 1  # older than the age limit (ads without a date are kept)
-            continue
         price_ron = to_ron(l.price, l.currency)
         title = l.title.lower()
         if (includes and not any(k in title for k in includes)) or any(k in title for k in excludes):
@@ -129,11 +127,12 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
             continue
         in_budget = (lo is None or price_ron >= lo) and (hi is None or price_ron <= hi)
         candidates.append((l, price_ron, in_budget))
-    # In the range first, so they get the item pages a run may read (max_enrich)
-    candidates.sort(key=lambda c: not c[2])
+    # Fresh ones in the budget first, then fresh ones outside it, then old ones: so they get the item
+    # pages a run may read (max_enrich) in that order
+    candidates.sort(key=lambda c: (is_old(c[0]), not c[2]))
 
     # 2. What's typical here: the median of everything in the range (for "far below the typical price")
-    typical = risk.typical_price([p for _, p, in_budget in candidates if in_budget])
+    typical = risk.typical_price([p for l, p, in_budget in candidates if in_budget and not is_old(l)])
     rows = {r["external_id"]: r for r in db.all(
         "SELECT id, external_id, price, currency, risk_signals, pin_order, inactive_at, excluded_at FROM listings"
         " WHERE search_id = ?",
@@ -161,12 +160,6 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
                 stats["pages"] += 1
                 provider.enrich(l)
                 clean.listing(l)  # the item page may have added to it (e.g. the location)
-                if oldest and l.posted_at and l.posted_at < oldest:
-                    stats["too_old"] += 1
-                    skipped_old.add(l.external_id)
-                    if row is not None and row["pin_order"] is None and row["excluded_at"] is None:  # pinned, excluded stay
-                        db.execute("DELETE FROM listings WHERE id = ?", (row["id"],))
-                    continue
         if stored_signals is not None and provider is not None and provider.needs_enrich:
             signals = stored_signals  # read from its page before; the page isn't read again
         else:
@@ -181,7 +174,8 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
                     stats["sellers"] += 1
                     signals.update(provider.seller_signals(l) or {})
         level, score, reasons, notes = risk.assess(signals, price_ron, typical, fmt)
-        stats["matching" if in_budget else "outside_budget"] += 1
+        old = is_old(l)  # after its page: that can show it's older than the id said
+        stats["too_old" if old else "matching" if in_budget else "outside_budget"] += 1
         item = {"title": l.title, "url": l.url, "image_url": l.image_url, "location": l.location,
                 "price": l.price, "currency": l.currency, "price_ron": price_ron,
                 "platform_label": platform_label, "risk_level": level, "risk_reasons": reasons,
@@ -206,7 +200,7 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
             if same_photo:  # stored excluded, never emailed
                 stats["same_photo"] += 1
                 db.execute("UPDATE listings SET excluded_at = ? WHERE id = ?", (stamp, cur.lastrowid))
-            elif in_budget and not is_baseline and search["notify_new"]:
+            elif in_budget and not old and not is_baseline and search["notify_new"]:
                 new.append(item)
             continue
 
@@ -218,7 +212,7 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
                        (row["id"], l.price, l.currency, stamp))
             if l.currency == row["currency"] and row["price"] > 0:
                 drop_pct = (row["price"] - l.price) / row["price"] * 100
-                if in_budget and drop_pct >= drop_min_pct and not is_baseline and search["notify_price_drops"]:
+                if in_budget and not old and drop_pct >= drop_min_pct and not is_baseline and search["notify_price_drops"]:
                     drops.append({**item, "old_price": row["price"], "drop_pct": drop_pct})
         db.execute(
             "UPDATE listings SET title = ?, url = ?, image_url = ?, price = ?, currency = ?,"
@@ -233,8 +227,6 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
                     (search["id"],)):
         db.execute("UPDATE listings SET price_ron = ? WHERE id = ?", (to_ron(r["price"], r["currency"]), r["id"]))
 
-    if skipped_old:
-        state["skipped_old"] = sorted(skipped_old)[-SKIP_MEMO:]
     if is_baseline:
         db.execute("UPDATE searches SET baseline_at = ? WHERE id = ?", (stamp, search["id"]))
     return new, drops, stats, is_baseline
@@ -395,7 +387,7 @@ def _tick(db, platforms, search_ids):
             error = None if listings else "The platform returned no results; check the search URL and filters"
             flagged = sum(1 for x in new + drops if x["risk_level"])
             log.info("[%s] %s: %d results, %d matching, %d outside the budget (kept), %d filtered out,"
-                     " %d outside its prices (not stored), %d older than %s days, %d without price, %d item pages read, %d sellers looked up,"
+                     " %d outside its prices (not stored), %d older than %s days (kept, not emailed), %d without price, %d item pages read, %d sellers looked up,"
                      " %d excluded (same photo as an excluded ad)%s",
                      label, s["name"], len(listings), stats["matching"], stats["outside_budget"], stats["filtered"],
                      stats["outside_prices"], stats["too_old"],
