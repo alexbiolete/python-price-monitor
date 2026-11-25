@@ -39,7 +39,8 @@ class Listing:
     image_url: Optional[str] = None
     posted_at: Optional[datetime] = None  # when the ad was posted (naive UTC); None: the platform doesn't say
     # Possible-scam signals the platform shows (see risk.py): account_age_days, seller_reviews,
-    # seller_rating (0-1), photos, unprotected, contact_in_text, and "description" (text, not stored)
+    # seller_rating (0-1), photos, unprotected, contact_in_text, and "description" (text; stored in
+    # listings.description, not in the signals)
     signals: dict = field(default_factory=dict)
     # The seller's id on the platform, for enrich() to look up (e.g. their location); never stored
     seller_id: Optional[str] = None
