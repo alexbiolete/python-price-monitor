@@ -186,6 +186,10 @@ Nothing is hidden: a flag means "look closer, and pay only through the platform"
 1 point is `low`, 2-3 `medium`, 4 or more `high`. Each kind of phrase counts once; an ad offering to meet
 can't be "only ships". Only these derived facts are stored, never who the seller is.
 
+**Good signs** show in a green *"✓ Good signs"* box between the notes and the warning signs (`risk_good`): a seller account 2 years old
+or more (OLX), a seller rated 4.5/5 or better with 5 reviews or more, buyer protection offered (OLX
+delivery), an offer to meet in person. They add no risk points; the dashboard's deal score counts them.
+
 **Notes** are worth knowing but add no points, and are shown on their own, before the warning signs
 (`risk_notes`, a grey *"ⓘ Notes"* box): a seller with no reviews yet, a messaging app in the ad (WhatsApp,
 Telegram, Viber, also "wapp" and wa.me / t.me links), and the same photo on other ads of the platform (a
@@ -301,7 +305,7 @@ Run `--once` every 5 minutes:
 ## Database contract
 
 The monitor owns the schema. It creates the tables on start and adds new columns
-itself (`settings.schema_version`, now 17). Other apps may read everything and
+itself (`settings.schema_version`, now 18). Other apps may read everything and
 write only the columns marked ✎. All times are UTC `DATETIME`s. JSON columns hold
 text.
 
@@ -341,7 +345,8 @@ Its columns: `search_id`, `platform`, `external_id`, `title`, `url`, `image_url`
 or `NULL`), `risk_score`, `risk_reasons` (JSON list of sentences) and
 `risk_signals` (the derived facts they came from), `risk_notes` (JSON list of reasons worth a
 mention even when the listing isn't flagged, e.g. "seller has no reviews yet"; show them when not
-showing the flag; `NULL`: none), `price_detail` (how `price` adds up, for
+showing the flag; `NULL`: none), `risk_good` (JSON list of good signs: an old seller account, a
+well-rated seller, buyer protection, an offer to meet; `NULL`: none), `price_detail` (how `price` adds up, for
 eBay's totals), and `pin_order` ✎: pinned in the dashboard, in this order (lower first; `NULL`: not
 pinned), `marked_suspicious_at` ✎: when it was marked suspicious in the dashboard (shown as a likely scam; its
 price drops aren't emailed; `NULL`: not marked), and `excluded_at` ✎: when it was excluded in the dashboard (left out of price estimates, listed

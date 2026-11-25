@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 
 # Columns added after the first version: (table, column, MySQL type, SQLite type).
 # Added on start when missing, so an existing database upgrades itself.
@@ -70,6 +70,9 @@ ADDED_COLUMNS = [
     # v17: when it was marked suspicious in the dashboard (shown as a likely scam whatever its signs; its price
     # drops aren't emailed); NULL: not marked. The monitor never changes it
     ("listings", "marked_suspicious_at", "DATETIME NULL", "TEXT"),
+    # v18: the good signs a listing shows (risk.good_signs: an old seller account, a well-rated seller,
+    # buyer protection, an offer to meet), a JSON list of sentences; NULL: none
+    ("listings", "risk_good", "TEXT NULL", "TEXT"),
 ]
 
 # Columns renamed since: (table, old name, new name), renamed in place on start, before the above

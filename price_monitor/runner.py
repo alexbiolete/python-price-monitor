@@ -189,21 +189,23 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
         others = len(photo_ads.get(l.image_url, ()) - {l.external_id}) if l.image_url else 0
         signals["same_photo_ads"] = others if others <= SAME_PHOTO_MAX else 0
         level, score, reasons, notes = risk.assess(signals, price_ron, typical, fmt)
+        good = risk.good_signs(signals)
         old = is_old(l)  # after its page: that can show it's older than the id said
         stats["too_old" if old else "matching" if in_budget else "outside_budget"] += 1
         item = {"title": l.title, "url": l.url, "image_url": l.image_url, "location": l.location,
                 "price": l.price, "currency": l.currency, "price_ron": price_ron,
                 "platform_label": platform_label, "risk_level": level, "risk_reasons": reasons,
-                "risk_notes": notes, "price_detail": l.price_detail}
+                "risk_notes": notes, "risk_good": good, "price_detail": l.price_detail}
         risk_values = (level, score, json.dumps(reasons, ensure_ascii=False), json.dumps(signals, ensure_ascii=False),
-                       json.dumps(notes, ensure_ascii=False) if notes else None)
+                       json.dumps(notes, ensure_ascii=False) if notes else None,
+                       json.dumps(good, ensure_ascii=False) if good else None)
 
         if row is None:
             same_photo = bool(l.image_url) and l.image_url in excluded_photos
             cur = db.execute(
                 "INSERT INTO listings (search_id, platform, external_id, title, url, image_url, price, currency,"
                 " location, posted_at, first_seen, last_seen, risk_level, risk_score, risk_reasons, risk_signals,"
-                " risk_notes, price_detail, price_ron) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " risk_notes, risk_good, price_detail, price_ron) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (search["id"], search["platform"], l.external_id, l.title[:500], l.url, l.image_url,
                  l.price, l.currency, (l.location or None) and l.location[:200], to_db_time(l.posted_at),
                  stamp, stamp) + risk_values + ((l.price_detail or None) and l.price_detail[:300], price_ron))
@@ -237,7 +239,7 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
             "UPDATE listings SET title = ?, url = ?, image_url = ?, price = ?, currency = ?,"
             " location = COALESCE(?, location), posted_at = COALESCE(?, posted_at), last_seen = ?, inactive_at = NULL,"
             " risk_level = ?, risk_score = ?,"
-            " risk_reasons = ?, risk_signals = ?, risk_notes = ?, price_detail = ?, price_ron = ? WHERE id = ?",
+            " risk_reasons = ?, risk_signals = ?, risk_notes = ?, risk_good = ?, price_detail = ?, price_ron = ? WHERE id = ?",
             (l.title[:500], l.url, l.image_url, l.price, l.currency, (l.location or None) and l.location[:200],
              to_db_time(l.posted_at), stamp) + risk_values + ((l.price_detail or None) and l.price_detail[:300], price_ron, row["id"]))
 
@@ -280,12 +282,13 @@ def rescore(db, now=None):
             others = len(photo_ads.get(r["image_url"], ()) - {r["external_id"]}) if r["image_url"] else 0
             signals["same_photo_ads"] = others if others <= SAME_PHOTO_MAX else 0
             level, score, reasons, notes = risk.assess(signals, r["price_ron"], typical, fmt)
+            good = risk.good_signs(signals)
             values = (level, score, json.dumps(reasons, ensure_ascii=False), json.dumps(signals, ensure_ascii=False),
-                      json.dumps(notes, ensure_ascii=False) if notes else None)
-            if values != (r["risk_level"], r["risk_score"], r["risk_reasons"], r["risk_signals"], r["risk_notes"]):
+                      json.dumps(notes, ensure_ascii=False) if notes else None, json.dumps(good, ensure_ascii=False) if good else None)
+            if values != (r["risk_level"], r["risk_score"], r["risk_reasons"], r["risk_signals"], r["risk_notes"], r["risk_good"]):
                 changed += 1
                 db.execute("UPDATE listings SET risk_level = ?, risk_score = ?, risk_reasons = ?, risk_signals = ?,"
-                           " risk_notes = ? WHERE id = ?", values + (r["id"],))
+                           " risk_notes = ?, risk_good = ? WHERE id = ?", values + (r["id"],))
     db.commit()
     return changed
 

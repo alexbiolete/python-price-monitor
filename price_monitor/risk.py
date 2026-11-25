@@ -246,5 +246,28 @@ def assess(signals, price_ron, typical, fmt_price):
     return level, score, reasons, notes
 
 
+# An account this old (days) is a good sign; shown in years
+OLD_ACCOUNT_DAYS = 730
+
+
+def good_signs(signals):
+    """The good signs a listing shows (no points; shown in green, between the notes and the warning signs, and
+    counted by the dashboard's deal score): an old seller account, a well-rated seller, buyer protection
+    offered, an offer to meet in person"""
+    good = []
+    age = signals.get("account_age_days")
+    if age is not None and age >= OLD_ACCOUNT_DAYS:
+        years = age // 365
+        good.append(f"seller account {years} years old")
+    reviews, rating = signals.get("seller_reviews") or 0, signals.get("seller_rating")
+    if reviews >= 5 and rating is not None and rating >= 0.9:
+        good.append(f"seller rated {rating * 5:.1f}/5 ({reviews} reviews)")
+    if signals.get("unprotected") is False:
+        good.append("offers buyer protection")
+    if signals.get("meets"):
+        good.append("offers to meet in person")
+    return good
+
+
 def contact_in_text(text):
     return bool(PHONE.search(text or "") or EMAIL.search(text or ""))

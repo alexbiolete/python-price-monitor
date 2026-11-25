@@ -22,6 +22,7 @@ MUTED = "#71717a"
 LINE = "#e4e4e7"
 SOFT = "#f4f4f5"
 GOOD = "#15803d"
+GOOD_BG = "#dcfce7"  # the good signs' box: light green, its text GOOD
 # The risk levels: yellow, orange, red (background, text, label)
 RISK_STYLE = {
     "low": ("#fef9c3", "#854d0e", "Slight risk"),
@@ -81,7 +82,7 @@ def _listing_row(item, price_html):
         f'<td style="padding:10px 0;border-top:1px solid {LINE};vertical-align:top">'
         f'<a href="{esc(item["url"])}" style="color:{INK};font-size:14px;font-weight:600;line-height:1.4;text-decoration:none">{esc(item["title"])}</a>'
         + (f'<div style="margin-top:2px;color:{MUTED};font-size:12px">{esc(meta)}</div>' if meta else "")
-        + _notes_html(item) + _risk_html(item)
+        + _notes_html(item) + _good_html(item) + _risk_html(item)
         + f'<div style="margin-top:4px"><a href="{esc(item["url"])}" style="color:{ACCENT};font-size:12px;font-weight:600;text-decoration:none">View listing →</a></div>'
         "</td>"
         f'<td align="right" style="padding:10px 0 10px 10px;border-top:1px solid {LINE};vertical-align:top;white-space:nowrap;font-size:14px;color:{INK}">{price_html}</td>'
@@ -110,6 +111,13 @@ def _risk_html(item):
     return _box(f"⚠ {esc(label)}", reasons, bg, ink)
 
 
+def _good_html(item):
+    """Good signs (an old seller account, a well-rated seller, buyer protection, an offer to meet), in a
+    green box between the notes and the warning signs (the dashboard's "Good signs")"""
+    good = item.get("risk_good") or []
+    return _box("✓ Good signs", good, GOOD_BG, GOOD) if good else ""
+
+
 def _notes_html(item):
     """Notes: worth knowing, no points (no reviews yet, a messaging app, the same photo on other ads), in a
     grey box before the warning signs (the dashboard's "Notes")"""
@@ -129,6 +137,8 @@ def _risk_text(item):
     text = ""
     if item.get("risk_notes"):
         text += f"\n      ⓘ Notes: {'; '.join(item['risk_notes'])}"
+    if item.get("risk_good"):
+        text += f"\n      ✓ Good signs: {'; '.join(item['risk_good'])}"
     if item.get("risk_level") in SHOWN_RISK and item.get("risk_reasons"):
         text += f"\n      ⚠ {RISK_STYLE[item['risk_level']][2]}: {'; '.join(item['risk_reasons'])}"
     return text
