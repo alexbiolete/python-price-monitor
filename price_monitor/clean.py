@@ -18,7 +18,13 @@ def text(value, limit=None):
     """Plain text: entities decoded, tags removed, one line. None stays None."""
     if value is None:
         return None
-    value = TAG.sub(" ", html.unescape(str(value)))
+    value = html.unescape(str(value))
+    # Again until none is left: removing one can join the pieces of another ("<scr<b>ipt>")
+    while True:
+        stripped = TAG.sub(" ", value)
+        if stripped == value:
+            break
+        value = stripped
     value = SPACE.sub(" ", CONTROL.sub(" ", value)).strip()
     return value[:limit] if limit else value
 
