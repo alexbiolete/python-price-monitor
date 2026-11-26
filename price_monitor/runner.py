@@ -14,9 +14,13 @@ platforms: e.g. olx,vinted on the server and facebook on a laptop, so nothing
 runs twice. --search runs chosen searches now.
 """
 
+import hashlib
+import hmac
 import json
 import logging
 import os
+import re
+import secrets
 import time
 from datetime import datetime, timedelta
 
@@ -84,6 +88,49 @@ SELLER_KEYS = ("seller_reviews", "seller_rating", "seller_negative_reviews")
 SAME_PHOTO_MAX = 10  # more ads than this with one photo: a placeholder image, not a copy
 
 
+DUPLICATE_WITHIN_HOURS = 24  # a new ad repeating one posted this close is a duplicate (settings.duplicate_within_hours)
+DUPLICATE_TITLE_MIN = 0.5  # share of title words two ads have in common to be the same item
+
+
+def seller_key(db, platform, seller_id):
+    """A one-way fingerprint of a seller, to tell two ads come from the same one without storing who:
+    HMAC-SHA256 of platform and id, keyed with settings.seller_salt (made at random on first use).
+    None without an id (Publi24, eBay, Facebook give none)."""
+    if not seller_id:
+        return None
+    row = db.one("SELECT seller_salt FROM settings WHERE id = 1") or {}
+    salt = row.get("seller_salt")
+    if not salt:
+        salt = secrets.token_hex(32)
+        db.execute("UPDATE settings SET seller_salt = ? WHERE id = 1", (salt,))
+    return hmac.new(salt.encode(), f"{platform}:{seller_id}".encode(), hashlib.sha256).hexdigest()[:32]
+
+
+def _title_words(title):
+    return set(re.findall(r"[a-z0-9]+", risk.plain(title)))
+
+
+def same_item(a, b):
+    """Two titles naming the same item: at least DUPLICATE_TITLE_MIN of their words in common"""
+    wa, wb = _title_words(a), _title_words(b)
+    return bool(wa and wb) and len(wa & wb) / len(wa | wb) >= DUPLICATE_TITLE_MIN
+
+
+def find_duplicate_of(db, search_id, listing, key, posted, within=timedelta(hours=DUPLICATE_WITHIN_HOURS)):
+    """The ad a new one repeats, in the same search and posted within `within` of it: the same seller
+    (similar title, or the same price; a price tried again counts too), or the same photo (whoever posted
+    it: one seller with two accounts). Its id, or None."""
+    rows = db.all("SELECT id, title, price, seller_key, image_url FROM listings WHERE search_id = ? AND duplicate_of IS NULL"
+                  " AND COALESCE(posted_at, first_seen) BETWEEN ? AND ? ORDER BY id",
+                  (search_id, to_db_time(posted - within), to_db_time(posted + within)))
+    for r in rows:
+        if listing.image_url and r["image_url"] == listing.image_url:
+            return r["id"]
+        if key and r["seller_key"] == key and (r["price"] == listing.price or same_item(r["title"], listing.title)):
+            return r["id"]
+    return None
+
+
 def search_limits(search, low_key, high_key):
     """Two of a search's limits (its budget, or its prices) in lei: they're in its currency (v21; RON by
     default), converted at the current BNR rates. None: no limit."""
@@ -112,7 +159,7 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
     state = spec.state if spec is not None else {}
     state.pop("skipped_old", None)  # ads over the age limit used to be skipped, and remembered here
     stats = {"matching": 0, "filtered": 0, "outside_budget": 0, "no_price": 0, "too_old": 0, "pages": 0, "sellers": 0,
-             "same_photo": 0, "outside_prices": 0}
+             "same_photo": 0, "outside_prices": 0, "duplicates": 0}
     fmt = lambda amount: fmt_price(amount, "RON")  # noqa: E731
 
     # 1. The search's filters. The budget only decides what's reported: ads outside it are kept
@@ -163,6 +210,11 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
         "SELECT DISTINCT image_url FROM listings WHERE platform = ? AND excluded_at IS NOT NULL"
         " AND image_url IS NOT NULL", (search["platform"],))}
 
+    # Duplicates (the same ad posted again): on or off, and how close in time, as the settings say
+    dup = db.one("SELECT duplicate_detection, duplicate_within_hours FROM settings WHERE id = 1") or {}
+    detect_duplicates = bool(dup.get("duplicate_detection", 1))
+    duplicate_within = timedelta(hours=max(1, int(dup.get("duplicate_within_hours") or DUPLICATE_WITHIN_HOURS)))
+
     new, drops = [], []
     budget = provider.max_enrich if provider is not None and provider.needs_enrich else 0
     seller_budget = provider.max_seller_lookups if provider is not None and provider.rates_sellers else 0
@@ -212,14 +264,17 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
 
         if row is None:
             same_photo = bool(l.image_url) and l.image_url in excluded_photos
+            key = seller_key(db, search["platform"], l.seller_id)
+            duplicate_of = find_duplicate_of(db, search["id"], l, key, l.posted_at or now, duplicate_within) if detect_duplicates else None
             cur = db.execute(
                 "INSERT INTO listings (search_id, platform, external_id, title, url, image_url, price, currency,"
                 " location, posted_at, first_seen, last_seen, risk_level, risk_score, risk_reasons, risk_signals,"
-                " risk_notes, risk_good, good_level, good_score, price_detail, price_ron, description)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " risk_notes, risk_good, good_level, good_score, price_detail, price_ron, description, seller_key, duplicate_of)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (search["id"], search["platform"], l.external_id, l.title[:500], l.url, l.image_url,
                  l.price, l.currency, (l.location or None) and l.location[:200], to_db_time(l.posted_at),
-                 stamp, stamp) + risk_values + ((l.price_detail or None) and l.price_detail[:300], price_ron, description))
+                 stamp, stamp) + risk_values + ((l.price_detail or None) and l.price_detail[:300], price_ron, description,
+                                                key, duplicate_of))
             db.execute("INSERT INTO price_history (listing_id, price, currency, seen_at) VALUES (?, ?, ?, ?)",
                        (cur.lastrowid, l.price, l.currency, stamp))
             if signals.get("uploaded_at"):  # its page shows it reposted since it was posted
@@ -228,6 +283,8 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
             if same_photo:  # stored excluded, never emailed
                 stats["same_photo"] += 1
                 db.execute("UPDATE listings SET excluded_at = ? WHERE id = ?", (stamp, cur.lastrowid))
+            elif duplicate_of:  # the same ad posted again: stored (marked), never emailed
+                stats["duplicates"] += 1
             elif in_budget and not old and not is_baseline and search["notify_new"]:
                 new.append(item)
             continue
@@ -464,11 +521,11 @@ def _tick(db, platforms, search_ids):
             flagged = sum(1 for x in new + drops if x["risk_level"])
             log.info("[%s] %s: %d results, %d matching, %d outside the budget (kept), %d filtered out,"
                      " %d outside its prices (not stored), %d older than %s days (kept, not emailed), %d without price, %d item pages read, %d sellers looked up,"
-                     " %d excluded (same photo as an excluded ad)%s",
+                     " %d excluded (same photo as an excluded ad), %d duplicates (not emailed)%s",
                      label, s["name"], len(listings), stats["matching"], stats["outside_budget"], stats["filtered"],
                      stats["outside_prices"], stats["too_old"],
                      max_age or "∞", stats["no_price"], stats["pages"], stats["sellers"], stats["same_photo"],
-                     " (baseline saved, no email)" if baseline
+                     stats["duplicates"], " (baseline saved, no email)" if baseline
                      else f"; {len(new)} new, {len(drops)} price drops, {flagged} flagged")
             if listings:  # a failed or empty run says nothing about the stored ads
                 checked, gone, repriced, reposts = recheck(db, s, provider, now)

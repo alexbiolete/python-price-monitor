@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 21
+SCHEMA_VERSION = 22
 
 # Columns added after the first version: (table, column, MySQL type, SQLite type).
 # Added on start when missing, so an existing database upgrades itself.
@@ -82,6 +82,14 @@ ADDED_COLUMNS = [
     # v21: the currency a search's budget and prices are in (RON by default); each check converts them to
     # lei at its BNR rates, so a budget in euro stays one as the rate moves
     ("searches", "currency", "VARCHAR(3) NOT NULL DEFAULT 'RON'", "TEXT NOT NULL DEFAULT 'RON'"),
+    # v22: duplicates. A one-way fingerprint of the seller (keyed with settings.seller_salt, made once at random;
+    # never the platform's id itself), and the ad a new one repeats (the same seller again within a day, or
+    # the same photo): not emailed, counted once in the dashboard's analysis
+    ("listings", "seller_key", "VARCHAR(32) NULL", "TEXT"),
+    ("listings", "duplicate_of", "BIGINT NULL", "INTEGER"),
+    ("settings", "seller_salt", "VARCHAR(64) NULL", "TEXT"),
+    ("settings", "duplicate_detection", "TINYINT(1) NOT NULL DEFAULT 1", "INTEGER NOT NULL DEFAULT 1"),
+    ("settings", "duplicate_within_hours", "INT NOT NULL DEFAULT 24", "INTEGER NOT NULL DEFAULT 24"),
 ]
 
 # Columns renamed since: (table, old name, new name), renamed in place on start, before the above
