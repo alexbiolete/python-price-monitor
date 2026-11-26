@@ -319,7 +319,7 @@ Run `--once` every 5 minutes:
 ## Database contract
 
 The monitor owns the schema. It creates the tables on start and adds new columns
-itself (`settings.schema_version`, now 21). Other apps may read everything and
+itself (`settings.schema_version`, now 22). Other apps may read everything and
 write only the columns marked ✎. All times are UTC `DATETIME`s. JSON columns hold
 text.
 
@@ -373,6 +373,14 @@ last; `NULL`: not excluded). The monitor never deletes a pinned or excluded list
 `--resend-all` keeps them. An ad posted again under a new id with the same photo as an excluded ad on
 its platform (bots repost bad ads this way; Vinted keeps the photo's address) is stored excluded and
 not emailed, so excluding one copy bans the rest; un-excluding a copy in the dashboard keeps it.
+`duplicate_of`: the earlier ad a new one repeats (`NULL`: none), set when it's stored (unless
+`settings.duplicate_detection` is 0): in the same search, posted within `settings.duplicate_within_hours` (24) of it, by the same seller (a similar title, or the same price: a price tried again
+counts too) or with the same photo (whoever posted it, e.g. one seller with two accounts). Sellers post
+the same item again to show up first among the newest; a duplicate is stored but never emailed, and
+counts once in a dashboard's analysis. `seller_key`: what tells the same seller, a one-way fingerprint
+(HMAC-SHA256 of platform and the platform's seller id, keyed with `settings.seller_salt`, made at random
+on first use); the id itself is never stored. OLX and Vinted give one; `NULL` elsewhere and for ads
+stored before v22.
 `inactive_at`: when the ad was found sold or removed (`NULL`: active), and `checked_at`: when it
 was last checked. After each run that returns results, the monitor opens the pages of up to 10 stored
 ads the run didn't show (they fell off the results or no longer match), each at most every 12 hours:
@@ -405,6 +413,9 @@ was posted. Not a warning sign; `posted_at` stays the original.
 | `last_tick_at` | The last check (cron alive?) |
 | `providers` | JSON list of `{name, label, seller_info, runs}`: every platform module, what each shows about a seller (`reviews`, `account_age`), and whether the copy writing here runs it |
 | `exchange_rates`, `exchange_rates_at` | The rates to lei in use, JSON `{date, source: "BNR", rates: {EUR: 5.34, ...}}`, and when they were fetched |
+| `seller_salt` | The key `listings.seller_key` is made with (random, made once); keep it private |
+| `duplicate_detection` ✎ | `1` (default): a new ad repeating one stored (`listings.duplicate_of`) is marked and not emailed; `0`: every ad counts |
+| `duplicate_within_hours` ✎ | How close in time a repeat counts as a duplicate (default 24) |
 | `prices_in_ron` ✎ | The dashboard's table shows prices in lei (the ad's own under them); `0`: as the ad shows them. Default `1` |
 | `merge_emails` ✎ | `1` (default): one email for all products a check found something for; `0`: one per product |
 | `email_max_risk` ✎ | The highest risk level emailed: `none` (only listings without one), `low`, `medium` or `high` (all, the default). Listings above it are stored and shown, not emailed |
