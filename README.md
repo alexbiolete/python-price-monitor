@@ -319,7 +319,7 @@ Run `--once` every 5 minutes:
 ## Database contract
 
 The monitor owns the schema. It creates the tables on start and adds new columns
-itself (`settings.schema_version`, now 23). Other apps may read everything and
+itself (`settings.schema_version`, now 24). Other apps may read everything and
 write only the columns marked ✎. All times are UTC `DATETIME`s. JSON columns hold
 text.
 
@@ -357,7 +357,8 @@ links are `http(s)` only (an ad without one is skipped); still escape it when sh
 Its columns: `search_id`, `platform`, `external_id`, `title`, `url`, `image_url`,
 `price`, `currency`, `price_ron` (the price in lei the range compares; eBay's total), `location`, `posted_at` (given or estimated),
 `first_seen`, `last_seen`, and the scam flags: `risk_level` (`low`/`medium`/`high`
-or `NULL`), `risk_score`, `risk_reasons` (JSON list of sentences) and
+or `NULL`), `risk_score`, `risk_reasons` (JSON list of sentences), `risk_points` (each one's points, a JSON list in the same order; `NULL`
+for none, or until `--rescore` for listings stored before v24) and
 `risk_signals` (the derived facts they came from), `risk_notes` (JSON list of reasons worth a
 mention even when the listing isn't flagged, e.g. "seller has no reviews yet"; show them when not
 showing the flag; `NULL`: none), `risk_good` (JSON list of good signs: an old seller account, a

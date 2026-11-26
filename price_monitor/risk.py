@@ -237,64 +237,62 @@ RUSH_POINTS = 2
 
 
 def assess(signals, price_ron, typical, fmt_price):
-    """(level or None, score, reasons, notes) for a listing. reasons: the warning signs, each with points,
-    which give the level; notes: worth knowing, no points (no reviews yet, a messaging app, the same
-    photo on other ads), shown on their own, before the warning signs."""
-    score, reasons, notes = 0, [], []
+    """(level or None, score, reasons, notes, points) for a listing. reasons: the warning signs, each with
+    points (`reason_points`, in the same order: a dashboard lists them one by one), which give the level; notes:
+    worth knowing, no points (no reviews yet, a messaging app, the same photo on other ads), shown on their
+    own, before the warning signs."""
+    reasons, notes, reason_points = [], [], []
+    score = 0
+
+    def add(n, reason):
+        nonlocal score
+        score += n
+        reasons.append(reason)
+        reason_points.append(n)
 
     if typical:
         ratio = price_ron / typical
-        for limit, points, _ in PRICE_STEPS:
+        for limit, step_points, _ in PRICE_STEPS:
             if ratio <= limit:
-                score += points
-                reasons.append(f"{round((1 - ratio) * 100)}% below the typical price ({fmt_price(typical)})")
+                add(step_points, f"{round((1 - ratio) * 100)}% below the typical price ({fmt_price(typical)})")
                 break
 
     age = signals.get("account_age_days")
     if age is not None:
         if age < 7:
-            score += 3
-            reasons.append(f"seller account {age} day{'s' if age != 1 else ''} old")
+            add(3, f"seller account {age} day{'s' if age != 1 else ''} old")
         elif age < 30:
-            score += 2
-            reasons.append(f"seller account {age} days old")
+            add(2, f"seller account {age} days old")
 
     reviews = signals.get("seller_reviews")
     if reviews == 0:
         notes.append("seller has no reviews yet")
     elif reviews and reviews >= 3 and signals.get("seller_rating") is not None and signals["seller_rating"] < 0.8:
-        score += 1
-        reasons.append(f"seller rated {signals['seller_rating'] * 5:.1f}/5")
+        add(1, f"seller rated {signals['seller_rating'] * 5:.1f}/5")
 
     negative = signals.get("seller_negative_reviews") or 0
     if negative >= 2 and reviews and negative / reviews >= 0.1:
-        score += 1
-        reasons.append(f"seller has {negative} negative reviews out of {reviews}")
+        add(1, f"seller has {negative} negative reviews out of {reviews}")
 
     meets = bool(signals.get("meets"))
     for phrase in signals.get("phrases") or []:
         kind = phrase.split(" (", 1)[0]
         if kind == OLD_MESSAGING_REASON or (meets and kind == "only ships, no meeting"):
             continue  # a messaging app is a note (below); offering to meet contradicts "only ships"
-        score += PHRASE_POINTS.get(kind, 2)
-        reasons.append(phrase)
+        add(PHRASE_POINTS.get(kind, 2), phrase)
 
     for phrase in (signals.get("rush") or [])[:1]:
-        score += RUSH_POINTS
-        reasons.append(phrase)
+        add(RUSH_POINTS, phrase)
 
     if signals.get("contact_in_text"):
-        score += 2
-        reasons.append("puts a phone number or email in the ad, to talk off the platform")
+        add(2, "puts a phone number or email in the ad, to talk off the platform")
 
     photos = signals.get("photos")
     if photos is not None and photos <= 1:
-        score += 1
-        reasons.append("only one photo" if photos == 1 else "no photos")
+        add(1, "only one photo" if photos == 1 else "no photos")
 
     if signals.get("unprotected") and score > 0 and not meets:
-        score += 1
-        reasons.append("no buyer protection")
+        add(1, "no buyer protection")
 
     # Notes: a messaging app (also when stored as the old scored phrase), the same photo on other ads
     old = [p.replace(OLD_MESSAGING_REASON, "mentions WhatsApp or Telegram", 1)
@@ -305,7 +303,7 @@ def assess(signals, price_ron, typical, fmt_price):
         notes.append(f"same photo as {same_photo} other ad{'s' if same_photo != 1 else ''} (copied or reposted)")
 
     level = next((name for minimum, name in LEVELS if score >= minimum), None)
-    return level, score, reasons, notes
+    return level, score, reasons, notes, reason_points
 
 
 # Good signs score too, in steps: an older seller account counts for more (from this many years, points)

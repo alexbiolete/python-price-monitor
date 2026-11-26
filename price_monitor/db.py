@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 23
+SCHEMA_VERSION = 24
 
 # Columns added after the first version: (table, column, MySQL type, SQLite type).
 # Added on start when missing, so an existing database upgrades itself.
@@ -91,6 +91,9 @@ ADDED_COLUMNS = [
     ("settings", "duplicate_detection", "TINYINT(1) NOT NULL DEFAULT 1", "INTEGER NOT NULL DEFAULT 1"),
     # v23: the window in minutes (was hours, v22): a seller reposting does it within minutes, not a day
     ("settings", "duplicate_within_minutes", "INT NOT NULL DEFAULT 30", "INTEGER NOT NULL DEFAULT 30"),
+    # v24: each warning sign's points, a JSON list in risk_reasons' order (a dashboard lists them one by one;
+    # NULL: none, or stored before v24 until --rescore)
+    ("listings", "risk_points", "TEXT NULL", "TEXT"),
 ]
 
 # Columns renamed since: (table, old name, new name), renamed in place on start, before the above
