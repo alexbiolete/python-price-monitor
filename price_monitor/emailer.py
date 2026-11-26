@@ -12,6 +12,8 @@ import ssl
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formataddr, formatdate, make_msgid
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 log = logging.getLogger("price_monitor")
 
@@ -91,6 +93,20 @@ def wordmark():
     return setting("EMAIL_TITLE", "Price monitor")
 
 
+MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def posted_text(posted_at):
+    """When it was posted, in the local time (TIMEZONE, default Europe/Bucharest): "Posted 26 Nov, 18:18",
+    the year added when it isn't this one. posted_at: naive UTC, as stored"""
+    if not posted_at:
+        return None
+    zone = ZoneInfo(setting("TIMEZONE", "Europe/Bucharest"))
+    local = posted_at.replace(tzinfo=timezone.utc).astimezone(zone)
+    year = "" if local.year == datetime.now(zone).year else f" {local.year}"
+    return f"Posted {local.day} {MONTHS[local.month - 1]}{year}, {local:%H:%M}"
+
+
 def _listing_row(item, price_html):
     # Always a photo cell (a grey square without one): rows with and without photos share one table, so a
     # missing cell would push the title into the narrow photo column of the rows around it
@@ -99,7 +115,7 @@ def _listing_row(item, price_html):
              if item.get("image_url") else
              f'<div style="width:48px;height:48px;border-radius:8px;background:{SOFT}"></div>')
     thumb = f'<td style="padding:10px 10px 10px 0;border-top:1px solid {LINE};width:48px;vertical-align:top">{photo}</td>'
-    meta = " · ".join(x for x in (item.get("location"), item.get("platform_label")) if x)
+    meta = " · ".join(x for x in (item.get("location"), item.get("platform_label"), posted_text(item.get("posted_at"))) if x)
     return (
         "<tr>" + thumb +
         f'<td style="padding:10px 0;border-top:1px solid {LINE};vertical-align:top">'

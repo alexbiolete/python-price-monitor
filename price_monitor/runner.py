@@ -148,6 +148,10 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
     oldest = now - timedelta(days=max_age_days) if max_age_days else None
     # Older than the age limit: stored, never reported (an ad without a date counts as fresh)
     is_old = lambda l: bool(oldest and l.posted_at and l.posted_at < oldest)  # noqa: E731
+    # Posted before the search began, yet only found now (the platform started showing more results, an
+    # old ad bumped up): new to the monitor, not new on the platform, so stored and never emailed
+    began = from_db_time(search["baseline_at"])
+    posted_before = lambda l: bool(began and l.posted_at and l.posted_at < began)  # noqa: E731
     includes = [k.lower() for k in json_list(search["include_keywords"]) if k.strip()]
     excludes = [k.lower() for k in json_list(search["exclude_keywords"]) if k.strip()]
     lo, hi = search_limits(search, "min_budget", "max_budget")
@@ -159,7 +163,7 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
     state = spec.state if spec is not None else {}
     state.pop("skipped_old", None)  # ads over the age limit used to be skipped, and remembered here
     stats = {"matching": 0, "filtered": 0, "outside_budget": 0, "no_price": 0, "too_old": 0, "pages": 0, "sellers": 0,
-             "same_photo": 0, "outside_prices": 0, "duplicates": 0}
+             "same_photo": 0, "outside_prices": 0, "duplicates": 0, "posted_before": 0}
     fmt = lambda amount: fmt_price(amount, "RON")  # noqa: E731
 
     # 1. The search's filters. The budget only decides what's reported: ads outside it are kept
@@ -192,7 +196,7 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
     # 2. What's typical here: the median of everything in the range (for "far below the typical price")
     typical = risk.typical_price([p for l, p, in_budget in candidates if in_budget and not is_old(l)])
     rows = {r["external_id"]: r for r in db.all(
-        "SELECT id, external_id, price, currency, risk_signals, description, pin_order, inactive_at, excluded_at, marked_suspicious_at FROM listings"
+        "SELECT id, external_id, price, currency, posted_at, risk_signals, description, pin_order, inactive_at, excluded_at, marked_suspicious_at FROM listings"
         " WHERE search_id = ?",
         (search["id"],))}
     # The photos of ads excluded in the dashboard, on this platform: an ad posted again under a new id
@@ -257,7 +261,8 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
         item = {"title": l.title, "url": l.url, "image_url": l.image_url, "location": l.location,
                 "price": l.price, "currency": l.currency, "price_ron": price_ron,
                 "platform_label": platform_label, "risk_level": level, "risk_reasons": reasons,
-                "risk_notes": notes, "risk_good": good, "good_level": good_level, "price_detail": l.price_detail}
+                "risk_notes": notes, "risk_good": good, "good_level": good_level, "price_detail": l.price_detail,
+                "posted_at": l.posted_at or (row and from_db_time(row["posted_at"]))}
         risk_values = (level, score, json.dumps(reasons, ensure_ascii=False), json.dumps(signals, ensure_ascii=False),
                        json.dumps(notes, ensure_ascii=False) if notes else None,
                        json.dumps(good, ensure_ascii=False) if good else None, good_level, good_score,
@@ -287,7 +292,10 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
             elif duplicate_of:  # the same ad posted again: stored (marked), never emailed
                 stats["duplicates"] += 1
             elif in_budget and not old and not is_baseline and search["notify_new"]:
-                new.append(item)
+                if posted_before(l):
+                    stats["posted_before"] += 1
+                else:
+                    new.append(item)
             continue
 
         if row["inactive_at"] is not None:  # found sold or removed before, and it's back
@@ -522,11 +530,11 @@ def _tick(db, platforms, search_ids):
             flagged = sum(1 for x in new + drops if x["risk_level"])
             log.info("[%s] %s: %d results, %d matching, %d outside the budget (kept), %d filtered out,"
                      " %d outside its prices (not stored), %d older than %s days (kept, not emailed), %d without price, %d item pages read, %d sellers looked up,"
-                     " %d excluded (same photo as an excluded ad), %d duplicates (not emailed)%s",
+                     " %d excluded (same photo as an excluded ad), %d duplicates (not emailed), %d posted before the search began (not emailed)%s",
                      label, s["name"], len(listings), stats["matching"], stats["outside_budget"], stats["filtered"],
                      stats["outside_prices"], stats["too_old"],
                      max_age or "∞", stats["no_price"], stats["pages"], stats["sellers"], stats["same_photo"],
-                     stats["duplicates"], " (baseline saved, no email)" if baseline
+                     stats["duplicates"], stats["posted_before"], " (baseline saved, no email)" if baseline
                      else f"; {len(new)} new, {len(drops)} price drops, {flagged} flagged")
             if listings:  # a failed or empty run says nothing about the stored ads
                 checked, gone, repriced, reposts = recheck(db, s, provider, now)
