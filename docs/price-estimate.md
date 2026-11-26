@@ -1,7 +1,7 @@
 # Price estimate
 
 A price suggestion for a product, from the listings the monitor already collects. Built in the
-codename-dojo dashboard (Price monitor → Price estimate; `GET /price-monitor/estimate`), which reads
+codename-dojo dashboard (Price monitor → Analysis; `GET /price-monitor/estimate`), which reads
 the stored listings; nothing runs on the monitor's side.
 
 ## Decided
