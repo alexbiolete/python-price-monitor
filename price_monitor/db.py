@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 22
+SCHEMA_VERSION = 23
 
 # Columns added after the first version: (table, column, MySQL type, SQLite type).
 # Added on start when missing, so an existing database upgrades itself.
@@ -83,13 +83,14 @@ ADDED_COLUMNS = [
     # lei at its BNR rates, so a budget in euro stays one as the rate moves
     ("searches", "currency", "VARCHAR(3) NOT NULL DEFAULT 'RON'", "TEXT NOT NULL DEFAULT 'RON'"),
     # v22: duplicates. A one-way fingerprint of the seller (keyed with settings.seller_salt, made once at random;
-    # never the platform's id itself), and the ad a new one repeats (the same seller again within a day, or
+    # never the platform's id itself), and the ad a new one repeats (the same seller again soon after, or
     # the same photo): not emailed, counted once in the dashboard's analysis
     ("listings", "seller_key", "VARCHAR(32) NULL", "TEXT"),
     ("listings", "duplicate_of", "BIGINT NULL", "INTEGER"),
     ("settings", "seller_salt", "VARCHAR(64) NULL", "TEXT"),
     ("settings", "duplicate_detection", "TINYINT(1) NOT NULL DEFAULT 1", "INTEGER NOT NULL DEFAULT 1"),
-    ("settings", "duplicate_within_hours", "INT NOT NULL DEFAULT 24", "INTEGER NOT NULL DEFAULT 24"),
+    # v23: the window in minutes (was hours, v22): a seller reposting does it within minutes, not a day
+    ("settings", "duplicate_within_minutes", "INT NOT NULL DEFAULT 30", "INTEGER NOT NULL DEFAULT 30"),
 ]
 
 # Columns renamed since: (table, old name, new name), renamed in place on start, before the above
@@ -99,6 +100,8 @@ RENAMED_COLUMNS = [
     # (added above, after the rename)
     ("searches", "min_price", "min_budget"),
     ("searches", "max_price", "max_budget"),
+    # v23: the duplicate window in minutes (set to 30 by the upgrade: the hours it held aren't minutes)
+    ("settings", "duplicate_within_hours", "duplicate_within_minutes"),
 ]
 
 MYSQL_SCHEMA = [
@@ -288,6 +291,8 @@ class Db:
         version = (self.one("SELECT schema_version FROM settings WHERE id = 1") or {"schema_version": SCHEMA_VERSION})
         if version["schema_version"] < 16:
             self._mark_rate_changes()
+        if version["schema_version"] < 23:
+            self.execute("UPDATE settings SET duplicate_within_minutes = 30 WHERE id = 1")
         if version["schema_version"] < 9:
             # Ads already found inactive before status_history: their one known change
             self.execute("INSERT INTO status_history (listing_id, status, seen_at)"
