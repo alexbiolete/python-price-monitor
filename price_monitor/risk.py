@@ -97,6 +97,8 @@ FIXED_PRICE_PHRASES = {
         "pret fix", "pret fixx", "pretul este fix", "pret ferm", "fara negociere", "fara negocieri", "nu negociez",
         "nu se negociaza", "nenegociabil", "non negociabil", "firm price", "price is firm", "no offers",
         "cena stala", "cena stała", "δεν συζητιεται",
+        # A price, then "fix": "Preț 3000 fix", "3.000 lei fix", "2500€ fix", "3000 ron fixx" (not "fixat")
+        re.compile(r"(?<![a-z0-9])\d[\d.,]*\s*(?:lei|ron|eur|euro|€|\$)?\s*fixx?(?![a-z])"),
     ],
 }
 
@@ -149,14 +151,22 @@ def _quote(sentence, phrase):
     return ("…" if start else "") + text[start:end].strip() + ("…" if end < len(text) else "")
 
 
+def _find(phrase, flat):
+    """Where a phrase is in a sentence's plain text: a word or words, whole (not inside other words), or a
+    compiled pattern for what words can't say ("3000 fix"). Returns the matched text, or None."""
+    if isinstance(phrase, re.Pattern):
+        m = phrase.search(flat)
+        return m.group(0).strip() if m else None
+    return phrase if re.search(r"(?<![a-z])" + re.escape(phrase) + r"(?![a-z])", flat) else None
+
+
 def phrase_reasons(title, description, groups=None):
     """One reason per kind of phrase found in the title or description (groups: PHRASES by default), with
     the ad's own words quoted: 'offers to meet in person ("Ridicarea locală este posibilă.")'"""
     sentences = [(sentence, f" {plain(sentence)} ") for sentence in _sentences(title, description)]
     found = []
     for reason, words in (groups or PHRASES).items():
-        hit = next(((sentence, w) for w in words for sentence, flat in sentences
-                    if re.search(r"(?<![a-z])" + re.escape(w) + r"(?![a-z])", flat)), None)
+        hit = next(((sentence, m) for w in words for sentence, flat in sentences for m in [_find(w, flat)] if m), None)
         if hit:
             found.append(f'{reason} ("{_quote(*hit)}")')
     return found
