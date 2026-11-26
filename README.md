@@ -163,7 +163,12 @@ After that, each run reports listings it hasn't seen and drops of at least
   dashboard's age filter) but never emailed, and get item pages only after fresh ones. OLX gives the
   posting date. Vinted doesn't, so it's estimated from the item id (ids only
   grow, about 15 million a day); close for days and weeks.
+- **Posted before the search began**: an ad first found after its search's first run, yet posted
+  before it (the platform started showing more results, an old ad bumped up), is stored but not
+  emailed: it's new to the monitor, not to the platform.
 - Ads without a price (swap-only) are skipped.
+- Each emailed listing shows when it was posted, in Romanian time (`TIMEZONE` in `.env`, default
+  `Europe/Bucharest`).
 
 ### Possible scams
 
