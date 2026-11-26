@@ -88,7 +88,7 @@ SELLER_KEYS = ("seller_reviews", "seller_rating", "seller_negative_reviews")
 SAME_PHOTO_MAX = 10  # more ads than this with one photo: a placeholder image, not a copy
 
 
-DUPLICATE_WITHIN_HOURS = 24  # a new ad repeating one posted this close is a duplicate (settings.duplicate_within_hours)
+DUPLICATE_WITHIN_MINUTES = 30  # a new ad repeating one posted this close is a duplicate (settings.duplicate_within_minutes)
 DUPLICATE_TITLE_MIN = 0.5  # share of title words two ads have in common to be the same item
 
 
@@ -116,7 +116,7 @@ def same_item(a, b):
     return bool(wa and wb) and len(wa & wb) / len(wa | wb) >= DUPLICATE_TITLE_MIN
 
 
-def find_duplicate_of(db, search_id, listing, key, posted, within=timedelta(hours=DUPLICATE_WITHIN_HOURS)):
+def find_duplicate_of(db, search_id, listing, key, posted, within=timedelta(minutes=DUPLICATE_WITHIN_MINUTES)):
     """The ad a new one repeats, in the same search and posted within `within` of it: the same seller
     (similar title, or the same price; a price tried again counts too), or the same photo (whoever posted
     it: one seller with two accounts). Its id, or None."""
@@ -211,9 +211,9 @@ def process(db, search, listings, platform_label, now, drop_min_pct, max_age_day
         " AND image_url IS NOT NULL", (search["platform"],))}
 
     # Duplicates (the same ad posted again): on or off, and how close in time, as the settings say
-    dup = db.one("SELECT duplicate_detection, duplicate_within_hours FROM settings WHERE id = 1") or {}
+    dup = db.one("SELECT duplicate_detection, duplicate_within_minutes FROM settings WHERE id = 1") or {}
     detect_duplicates = bool(dup.get("duplicate_detection", 1))
-    duplicate_within = timedelta(hours=max(1, int(dup.get("duplicate_within_hours") or DUPLICATE_WITHIN_HOURS)))
+    duplicate_within = timedelta(minutes=max(1, int(dup.get("duplicate_within_minutes") or DUPLICATE_WITHIN_MINUTES)))
 
     new, drops = [], []
     budget = provider.max_enrich if provider is not None and provider.needs_enrich else 0
