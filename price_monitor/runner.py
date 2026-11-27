@@ -25,6 +25,7 @@ import time
 from datetime import datetime, timedelta
 
 from .db import from_db_time, json_list, json_object, to_db_time, utcnow
+from . import thumbs
 from . import clean, rates, risk
 from .emailer import by_product, fmt_price, render_digest, send_email
 from .providers import PROVIDERS, get_provider_class
@@ -561,6 +562,16 @@ def _tick(db, platforms, search_ids):
             db.execute("UPDATE searches SET run_requested_at = NULL WHERE id = ? AND run_requested_at = ?",
                        (s["id"], to_db_time(from_db_time(s["run_requested_at"]))))
         db.commit()
+
+    # The ads' photos: a few saved each run (the ones found before fill in over a few runs), and the
+    # gone ones' purged when the settings turn that on. Never fails the run
+    try:
+        saved, failed = thumbs.save_missing(db, now)
+        purged = thumbs.auto_purge(db, now)
+        if saved or failed or purged:
+            log.info("Photos: %d saved, %d not (tried again later), %d purged", saved, failed, purged)
+    except Exception:
+        log.exception("Saving the ads' photos failed; continuing")
 
     if reports:
         to = settings["email_to"] or os.getenv("EMAIL_TO")
