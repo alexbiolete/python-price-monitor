@@ -564,12 +564,12 @@ def _tick(db, platforms, search_ids):
         db.commit()
 
     # The ads' photos: a few saved each run (the ones found before fill in over a few runs), and the
-    # gone ones' purged when the settings turn that on. Never fails the run
+    # old ones (ads gone long) deleted when the settings turn that on. Never fails the run
     try:
         saved, failed = thumbs.save_missing(db, now)
-        purged = thumbs.auto_purge(db, now)
-        if saved or failed or purged:
-            log.info("Photos: %d saved, %d not (tried again later), %d purged", saved, failed, purged)
+        deleted = thumbs.auto_delete_old(db, now)
+        if saved or failed or deleted:
+            log.info("Photos: %d saved, %d not (tried again later), %d old ones deleted", saved, failed, deleted)
     except Exception:
         log.exception("Saving the ads' photos failed; continuing")
 

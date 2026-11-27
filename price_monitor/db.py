@@ -94,9 +94,9 @@ ADDED_COLUMNS = [
     # v24: each warning sign's points, a JSON list in risk_reasons' order (a dashboard lists them one by one;
     # NULL: none, or stored before v24 until --rescore)
     ("listings", "risk_points", "TEXT NULL", "TEXT"),
-    # v25: small copies of the ads' photos (the listing_thumbs table, thumbs.py): saved or not, and the purge of
-    # the photos of ads gone for more than thumbnail_purge_days, by hand or on every run when
-    # thumbnail_auto_purge is on (off by default)
+    # v25: small copies of the ads' photos (the listing_thumbs table, thumbs.py): saved or not, and deleting the
+    # old ones, the photos of ads gone for more than thumbnail_purge_days, by hand or on every run when
+    # thumbnail_auto_purge is on (off by default; the columns' names say "purge", the dashboard "delete")
     ("settings", "thumbnails", "TINYINT(1) NOT NULL DEFAULT 1", "INTEGER NOT NULL DEFAULT 1"),
     ("settings", "thumbnail_purge_days", "INT NOT NULL DEFAULT 90", "INTEGER NOT NULL DEFAULT 90"),
     ("settings", "thumbnail_auto_purge", "TINYINT(1) NOT NULL DEFAULT 0", "INTEGER NOT NULL DEFAULT 0"),
