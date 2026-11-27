@@ -236,74 +236,115 @@ def typical_price(prices):
 RUSH_POINTS = 2
 
 
+# Each note and flag as a constant for readers (listings.risk_codes, v27): a key and its values, so a dashboard
+# words it in its own language ({"key": "accountDays", "params": {"count": 1}}); the sentences stay, for the email.
+# A phrase found in the ad keeps the ad's own words, as "quote"; one with no key here is {"key": "text"} with it
+PHRASE_KEYS = {
+    "asks for payment in advance": "advancePayment",
+    "asks for a money transfer": "moneyTransfer",
+    "sends a payment link or code": "paymentLink",
+    "only ships, no meeting": "onlyShips",
+    "delivers only by courier, outside the platform": "ownCourier",
+    "says they're abroad": "abroad",
+    "pushes for a quick sale": "rush",
+    "offers to meet in person": "meets",
+    "mentions WhatsApp or Telegram": "messaging",
+}
+
+
+def code(key, **params):
+    return {"key": key, "params": params}
+
+
+def phrase_code(phrase):
+    """A found phrase ('asks for payment in advance ("…")') as its constant: its kind's key, the ad's words"""
+    kind, _, rest = phrase.partition(' ("')
+    quote = rest[:-2] if rest.endswith('")') else None
+    key = PHRASE_KEYS.get(kind)
+    if key is None:
+        return code("text", text=phrase)
+    return code(key, quote=quote) if quote else code(key)
+
+
 def assess(signals, price_ron, typical, fmt_price):
-    """(level or None, score, reasons, notes, points) for a listing. reasons: the warning signs, each with
+    """(level or None, score, reasons, notes, points, codes) for a listing. reasons: the warning signs, each with
     points (`reason_points`, in the same order: a dashboard lists them one by one), which give the level; notes:
     worth knowing, no points (no reviews yet, a messaging app, the same photo on other ads), shown on their
-    own, before the warning signs."""
+    own, before the warning signs. codes: {"reasons": [...], "notes": [...]}, each one's constant, in order."""
     reasons, notes, reason_points = [], [], []
+    reason_codes, note_codes = [], []
     score = 0
 
-    def add(n, reason):
+    def add(n, reason, constant):
         nonlocal score
         score += n
         reasons.append(reason)
         reason_points.append(n)
+        reason_codes.append(constant)
+
+    def note(text, constant):
+        notes.append(text)
+        note_codes.append(constant)
 
     if typical:
         ratio = price_ron / typical
         for limit, step_points, _ in PRICE_STEPS:
             if ratio <= limit:
-                add(step_points, f"{round((1 - ratio) * 100)}% below the typical price ({fmt_price(typical)})")
+                pct = round((1 - ratio) * 100)
+                add(step_points, f"{pct}% below the typical price ({fmt_price(typical)})",
+                    code("belowTypical", pct=pct, typical=round(typical)))
                 break
 
     age = signals.get("account_age_days")
     if age is not None:
         if age < 7:
-            add(3, f"seller account {age} day{'s' if age != 1 else ''} old")
+            add(3, f"seller account {age} day{'s' if age != 1 else ''} old", code("accountDays", count=age))
         elif age < 30:
-            add(2, f"seller account {age} days old")
+            add(2, f"seller account {age} days old", code("accountDays", count=age))
 
     reviews = signals.get("seller_reviews")
     if reviews == 0:
-        notes.append("seller has no reviews yet")
+        note("seller has no reviews yet", code("noReviewsYet"))
     elif reviews and reviews >= 3 and signals.get("seller_rating") is not None and signals["seller_rating"] < 0.8:
-        add(1, f"seller rated {signals['seller_rating'] * 5:.1f}/5")
+        rating = round(signals["seller_rating"] * 5, 1)
+        add(1, f"seller rated {rating:.1f}/5", code("rated", rating=rating))
 
     negative = signals.get("seller_negative_reviews") or 0
     if negative >= 2 and reviews and negative / reviews >= 0.1:
-        add(1, f"seller has {negative} negative reviews out of {reviews}")
+        add(1, f"seller has {negative} negative reviews out of {reviews}", code("negativeReviews", count=negative, total=reviews))
 
     meets = bool(signals.get("meets"))
     for phrase in signals.get("phrases") or []:
         kind = phrase.split(" (", 1)[0]
         if kind == OLD_MESSAGING_REASON or (meets and kind == "only ships, no meeting"):
             continue  # a messaging app is a note (below); offering to meet contradicts "only ships"
-        add(PHRASE_POINTS.get(kind, 2), phrase)
+        add(PHRASE_POINTS.get(kind, 2), phrase, phrase_code(phrase))
 
     for phrase in (signals.get("rush") or [])[:1]:
-        add(RUSH_POINTS, phrase)
+        add(RUSH_POINTS, phrase, phrase_code(phrase))
 
     if signals.get("contact_in_text"):
-        add(2, "puts a phone number or email in the ad, to talk off the platform")
+        add(2, "puts a phone number or email in the ad, to talk off the platform", code("contactInAd"))
 
     photos = signals.get("photos")
     if photos is not None and photos <= 1:
-        add(1, "only one photo" if photos == 1 else "no photos")
+        add(1, "only one photo" if photos == 1 else "no photos", code("onePhoto" if photos == 1 else "noPhotos"))
 
     if signals.get("unprotected") and score > 0 and not meets:
-        add(1, "no buyer protection")
+        add(1, "no buyer protection", code("noProtection"))
 
     # Notes: a messaging app (also when stored as the old scored phrase), the same photo on other ads
     old = [p.replace(OLD_MESSAGING_REASON, "mentions WhatsApp or Telegram", 1)
            for p in signals.get("phrases") or [] if p.startswith(OLD_MESSAGING_REASON)]
-    notes += (signals.get("messaging") or old)[:1]
+    for phrase in (signals.get("messaging") or old)[:1]:
+        note(phrase, phrase_code(phrase))
     same_photo = signals.get("same_photo_ads") or 0
     if same_photo:
-        notes.append(f"same photo as {same_photo} other ad{'s' if same_photo != 1 else ''} (copied or reposted)")
+        note(f"same photo as {same_photo} other ad{'s' if same_photo != 1 else ''} (copied or reposted)",
+             code("samePhoto", count=same_photo))
 
     level = next((name for minimum, name in LEVELS if score >= minimum), None)
-    return level, score, reasons, notes, reason_points
+    return level, score, reasons, notes, reason_points, {"reasons": reason_codes, "notes": note_codes}
 
 
 # Good signs score too, in steps: an older seller account counts for more (from this many years, points)
@@ -313,11 +354,11 @@ GOOD_LEVELS = [(4, "high"), (2, "medium"), (1, "low")]
 
 
 def good_signs(signals):
-    """(level or None, points, reasons) for the good signs a listing shows: an old seller account (1 point
+    """(level or None, points, reasons, codes) for the good signs a listing shows: an old seller account (1 point
     from 2 years, 2 from 5, 3 from 10), a well-rated seller (4.5/5 or more with 5 reviews: 1, with 20: 2),
     buyer protection offered (1), an offer to meet in person (1). Shown in green, between the notes and
-    the warning signs; the dashboard's deal score counts them too."""
-    points, good = 0, []
+    the warning signs; the dashboard's deal score counts them too. codes: each one's constant, in order."""
+    points, good, codes = 0, [], []
     age = signals.get("account_age_days")
     if age is not None:
         years = age // 365
@@ -325,22 +366,27 @@ def good_signs(signals):
         if step:
             points += step
             good.append(f"seller account {years} years old")
+            codes.append(code("accountYears", count=years))
     reviews, rating = signals.get("seller_reviews") or 0, signals.get("seller_rating")
     if reviews >= 5 and rating is not None and rating >= 0.9:
         points += 2 if reviews >= 20 else 1
         good.append(f"seller rated {rating * 5:.1f}/5 ({reviews} reviews)")
+        codes.append(code("ratedWithReviews", rating=round(rating * 5, 1), count=reviews))
     if signals.get("unprotected") is False:
         points += 1
         good.append("offers buyer protection")
+        codes.append(code("protection"))
     meets = signals.get("meets")
     if isinstance(meets, list) and meets:
         points += 1
         good.append(meets[0])  # 'offers to meet in person ("predare personala")'
+        codes.append(phrase_code(meets[0]))
     elif meets is True:
         points += 1
         good.append("offers to meet in person")  # stored before the phrase was kept
+        codes.append(code("meets"))
     level = next((name for minimum, name in GOOD_LEVELS if points >= minimum), None)
-    return level, points, good
+    return level, points, good, codes
 
 
 def contact_in_text(text):

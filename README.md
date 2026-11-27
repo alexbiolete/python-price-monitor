@@ -325,7 +325,7 @@ Run `--once` every 5 minutes:
 ## Database contract
 
 The monitor owns the schema. It creates the tables on start and adds new columns
-itself (`settings.schema_version`, now 26). Other apps may read everything and
+itself (`settings.schema_version`, now 27). Other apps may read everything and
 write only the columns marked ✎. All times are UTC `DATETIME`s. JSON columns hold
 text.
 
@@ -364,7 +364,12 @@ Its columns: `search_id`, `platform`, `external_id`, `title`, `url`, `image_url`
 `price`, `currency`, `price_ron` (the price in lei the range compares; eBay's total), `location`, `posted_at` (given or estimated),
 `first_seen`, `last_seen`, and the scam flags: `risk_level` (`low`/`medium`/`high`
 or `NULL`), `risk_score`, `risk_reasons` (JSON list of sentences), `risk_points` (each one's points, a JSON list in the same order; `NULL`
-for none, or until `--rescore` for listings stored before v24) and
+for none, or until `--rescore` for listings stored before v24) and `risk_codes` (v27: each note's, warning sign's and good
+sign's constant, a JSON object `{"reasons": [...], "notes": [...], "good": [...]}` in the orders of
+`risk_reasons`, `risk_notes` and `risk_good`, each `{"key": "accountDays", "params": {"count": 1}}`, so a reader
+words them in its own language; a phrase found in the ad keeps the ad's words as `quote`, one the monitor has no
+key for is `{"key": "text", "params": {"text": ...}}`; `NULL` for none, or until `--rescore` for listings stored
+before v27) and
 `risk_signals` (the derived facts they came from), `risk_notes` (JSON list of reasons worth a
 mention even when the listing isn't flagged, e.g. "seller has no reviews yet"; show them when not
 showing the flag; `NULL`: none), `risk_good` (JSON list of good signs: an old seller account, a
