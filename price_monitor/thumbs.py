@@ -7,8 +7,8 @@ before this existed fill in over a few runs. A photo that fails is tried again a
 MAX_TRIES times in all.
 
 Old ones deleted by the rule the dashboard uses too (README, "listing_thumbs"): the photos of ads
-gone, not seen for more than N days (settings.thumbnail_purge_days), pinned ones kept. By hand (the
-dashboard's Settings, or --delete-old-photos), or on every run when settings.thumbnail_auto_purge
+gone, not seen for more than N days (settings.thumbnail_delete_after_days), pinned ones kept. By hand (the
+dashboard's Settings, or --delete-old-photos), or on every run when settings.thumbnail_auto_delete
 is on (off by default).
 """
 
@@ -125,7 +125,7 @@ def delete_old(db, days, now):
 
 def auto_delete_old(db, now):
     """Old photos deleted on every run, when the settings turn it on (off by default)"""
-    s = db.one("SELECT thumbnail_auto_purge, thumbnail_purge_days FROM settings WHERE id = 1") or {}
-    if s.get("thumbnail_auto_purge") and s.get("thumbnail_purge_days"):
-        return delete_old(db, int(s["thumbnail_purge_days"]), now)
+    s = db.one("SELECT thumbnail_auto_delete, thumbnail_delete_after_days FROM settings WHERE id = 1") or {}
+    if s.get("thumbnail_auto_delete") and s.get("thumbnail_delete_after_days"):
+        return delete_old(db, int(s["thumbnail_delete_after_days"]), now)
     return 0

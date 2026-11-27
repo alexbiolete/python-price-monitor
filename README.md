@@ -325,7 +325,7 @@ Run `--once` every 5 minutes:
 ## Database contract
 
 The monitor owns the schema. It creates the tables on start and adds new columns
-itself (`settings.schema_version`, now 25). Other apps may read everything and
+itself (`settings.schema_version`, now 26). Other apps may read everything and
 write only the columns marked ✎. All times are UTC `DATETIME`s. JSON columns hold
 text.
 
@@ -400,8 +400,8 @@ about 1 KB; `NULL`: not saved yet), `tries`: failed attempts, `saved_at`. Each r
 first, for listings in their search's budget, pinned or marked suspicious (the ones found before fill in
 over a few runs); a failed one is tried again a day later, 3 times in all. Nothing is saved while
 `settings.thumbnails` is 0. Deleting old photos (by hand from a dashboard, or `--delete-old-photos DAYS`; on
-every run when `settings.thumbnail_auto_purge` is 1) deletes the rows of listings whose `last_seen` is more than
-`settings.thumbnail_purge_days` days ago (ads gone from the platform), except pinned ones. A reader may
+every run when `settings.thumbnail_auto_delete` is 1) deletes the rows of listings whose `last_seen` is more than
+`settings.thumbnail_delete_after_days` days ago (ads gone from the platform), except pinned ones. A reader may
 delete rows by the same rule.
 
 **`price_history`**: `listing_id`, `price`, `currency`, `seen_at`, `reason`. One row when a
@@ -437,7 +437,7 @@ was posted. Not a warning sign; `posted_at` stays the original.
 | `merge_emails` ✎ | `1` (default): one email for all products a check found something for; `0`: one per product |
 | `email_max_risk` ✎ | The highest risk level emailed: `none` (only listings without one), `low`, `medium` or `high` (all, the default). Listings above it are stored and shown, not emailed |
 | `thumbnails` ✎ | `1` (default): save small copies of the ads' photos (`listing_thumbs`); `0`: save none (the saved ones stay) |
-| `thumbnail_purge_days` ✎ | Old photos: the ones of ads gone (not seen) for more than this many days, pinned ones kept (default 90) |
-| `thumbnail_auto_purge` ✎ | `1`: delete old photos on every run; `0` (default): only by hand |
+| `thumbnail_delete_after_days` ✎ | Old photos: the ones of ads gone (not seen) for more than this many days, pinned ones kept (default 90) |
+| `thumbnail_auto_delete` ✎ | `1`: delete old photos on every run; `0` (default): only by hand |
 
 Deleting a search deletes its listings and their history (foreign keys cascade).
