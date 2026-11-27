@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 24
+SCHEMA_VERSION = 25
 
 # Columns added after the first version: (table, column, MySQL type, SQLite type).
 # Added on start when missing, so an existing database upgrades itself.
@@ -94,6 +94,12 @@ ADDED_COLUMNS = [
     # v24: each warning sign's points, a JSON list in risk_reasons' order (a dashboard lists them one by one;
     # NULL: none, or stored before v24 until --rescore)
     ("listings", "risk_points", "TEXT NULL", "TEXT"),
+    # v25: small copies of the ads' photos (the listing_thumbs table, thumbs.py): saved or not, and the purge of
+    # the photos of ads gone for more than thumbnail_purge_days, by hand or on every run when
+    # thumbnail_auto_purge is on (off by default)
+    ("settings", "thumbnails", "TINYINT(1) NOT NULL DEFAULT 1", "INTEGER NOT NULL DEFAULT 1"),
+    ("settings", "thumbnail_purge_days", "INT NOT NULL DEFAULT 90", "INTEGER NOT NULL DEFAULT 90"),
+    ("settings", "thumbnail_auto_purge", "TINYINT(1) NOT NULL DEFAULT 0", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 # Columns renamed since: (table, old name, new name), renamed in place on start, before the above
@@ -179,6 +185,14 @@ MYSQL_SCHEMA = [
         providers TEXT NULL,
         schema_version INT NOT NULL DEFAULT 1
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
+    # v25: an ad's photo, 80x80 WebP (thumbs.py); data NULL: not saved yet (tries: failed attempts)
+    """CREATE TABLE IF NOT EXISTS listing_thumbs (
+        listing_id BIGINT PRIMARY KEY,
+        data BLOB NULL,
+        tries INT NOT NULL DEFAULT 0,
+        saved_at DATETIME NOT NULL,
+        CONSTRAINT fk_listing_thumbs_listing FOREIGN KEY (listing_id) REFERENCES listings(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""",
     "INSERT IGNORE INTO settings (id, schema_version) VALUES (1, %d)" % SCHEMA_VERSION,
 ]
 
@@ -226,6 +240,10 @@ SQLITE_SCHEMA = [
         default_interval_minutes INTEGER NOT NULL DEFAULT 10,
         email_to TEXT, run_requested_at TEXT, last_tick_at TEXT, providers TEXT,
         schema_version INTEGER NOT NULL DEFAULT 1
+    )""",
+    """CREATE TABLE IF NOT EXISTS listing_thumbs (
+        listing_id INTEGER PRIMARY KEY REFERENCES listings(id) ON DELETE CASCADE,
+        data BLOB, tries INTEGER NOT NULL DEFAULT 0, saved_at TEXT NOT NULL
     )""",
     "INSERT OR IGNORE INTO settings (id, schema_version) VALUES (1, %d)" % SCHEMA_VERSION,
 ]

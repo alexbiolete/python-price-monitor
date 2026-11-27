@@ -61,6 +61,7 @@ With no SMTP settings, the email is printed instead of sent.
 .venv/bin/python -m price_monitor --import searches.example.json   # add searches (once)
 .venv/bin/python -m price_monitor --export searches.json           # save every search to a file (a backup)
 .venv/bin/python -m price_monitor --rescore                        # every stored listing's risk again, with the current rules
+.venv/bin/python -m price_monitor --purge-thumbnails 90            # delete the saved photos of ads gone 90+ days (pinned kept)
 .venv/bin/python -m price_monitor                  # keep running; Ctrl+C to stop
 .venv/bin/python -m price_monitor --once           # one check, then exit (what cron runs)
 .venv/bin/python -m price_monitor --status         # the searches and their last run
@@ -324,7 +325,7 @@ Run `--once` every 5 minutes:
 ## Database contract
 
 The monitor owns the schema. It creates the tables on start and adds new columns
-itself (`settings.schema_version`, now 24). Other apps may read everything and
+itself (`settings.schema_version`, now 25). Other apps may read everything and
 write only the columns marked ✎. All times are UTC `DATETIME`s. JSON columns hold
 text.
 
@@ -393,6 +394,16 @@ ads the run didn't show (they fell off the results or no longer match), each at 
 a missing ad (404, or a redirect away from it) or one its page says is closed gets `inactive_at`; OLX
 pages also update the price. An inactive ad that shows up in the results again is active again.
 
+**`listing_thumbs`** (v25): a small copy of an ad's photo, so a listing keeps one after the platform
+deletes the ad and its files. `listing_id` (the key), `data`: an 80x80 WebP (the photo's middle square,
+about 1 KB; `NULL`: not saved yet), `tries`: failed attempts, `saved_at`. Each run saves up to 40, newest
+first, for listings in their search's budget, pinned or marked suspicious (the ones found before fill in
+over a few runs); a failed one is tried again a day later, 3 times in all. Nothing is saved while
+`settings.thumbnails` is 0. The purge (by hand from a dashboard, or `--purge-thumbnails DAYS`; on every
+run when `settings.thumbnail_auto_purge` is 1) deletes the rows of listings whose `last_seen` is more than
+`settings.thumbnail_purge_days` days ago (ads gone from the platform), except pinned ones. A reader may
+delete rows by the same rule.
+
 **`price_history`**: `listing_id`, `price`, `currency`, `seen_at`, `reason`. One row when a
 listing is first seen (`seen_at` = its `first_seen`), and one for every change. `reason` is `rate` when
 only the platform's currency conversion moved the price: Vinted shows a foreign seller's price (in PLN,
@@ -425,5 +436,8 @@ was posted. Not a warning sign; `posted_at` stays the original.
 | `prices_in_ron` ✎ | The dashboard's table shows prices in lei (the ad's own under them); `0`: as the ad shows them. Default `1` |
 | `merge_emails` ✎ | `1` (default): one email for all products a check found something for; `0`: one per product |
 | `email_max_risk` ✎ | The highest risk level emailed: `none` (only listings without one), `low`, `medium` or `high` (all, the default). Listings above it are stored and shown, not emailed |
+| `thumbnails` ✎ | `1` (default): save small copies of the ads' photos (`listing_thumbs`); `0`: save none (the saved ones stay) |
+| `thumbnail_purge_days` ✎ | The purge deletes the photos of ads gone (not seen) for more than this many days, pinned ones kept (default 90) |
+| `thumbnail_auto_purge` ✎ | `1`: purge on every run; `0` (default): only by hand |
 
 Deleting a search deletes its listings and their history (foreign keys cascade).
