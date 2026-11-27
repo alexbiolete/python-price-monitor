@@ -107,7 +107,10 @@ class OlxProvider(Provider):
             raw.extend(data)
             if len(data) < PAGE_LIMIT:
                 break
-        return [self.parse(o) for o in raw]
+        # Its search also lists ads already closed ("removed_by_user", "outdated", "limited", "moderated"... since
+        # late November 2026): only the active ones are up. The rest drop out of the results, so the monitor reads
+        # their pages at once (runner.recheck) and marks them sold or removed
+        return [self.parse(o) for o in raw if o.get("status") in (None, "active")]
 
     def same_ad(self, url, final_url):
         """Ad addresses end in "-ID<code>.html"; the words before it follow the title"""
