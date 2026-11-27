@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 26
+SCHEMA_VERSION = 27
 
 # Columns added after the first version: (table, column, MySQL type, SQLite type).
 # Added on start when missing, so an existing database upgrades itself.
@@ -100,6 +100,10 @@ ADDED_COLUMNS = [
     ("settings", "thumbnails", "TINYINT(1) NOT NULL DEFAULT 1", "INTEGER NOT NULL DEFAULT 1"),
     ("settings", "thumbnail_delete_after_days", "INT NOT NULL DEFAULT 90", "INTEGER NOT NULL DEFAULT 90"),
     ("settings", "thumbnail_auto_delete", "TINYINT(1) NOT NULL DEFAULT 0", "INTEGER NOT NULL DEFAULT 0"),
+    # v27: the notes', red flags' and green flags' constants (risk.py: code, phrase_code), a JSON object
+    # {"reasons": [...], "notes": [...], "good": [...]} in risk_reasons', risk_notes' and risk_good's orders, each
+    # {"key": ..., "params": {...}}, so a dashboard words them in its own language; NULL: none, or until --rescore
+    ("listings", "risk_codes", "TEXT NULL", "TEXT"),
 ]
 
 # Columns renamed since: (table, old name, new name), renamed in place on start, before the above
