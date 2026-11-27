@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-SCHEMA_VERSION = 25
+SCHEMA_VERSION = 26
 
 # Columns added after the first version: (table, column, MySQL type, SQLite type).
 # Added on start when missing, so an existing database upgrades itself.
@@ -95,11 +95,11 @@ ADDED_COLUMNS = [
     # NULL: none, or stored before v24 until --rescore)
     ("listings", "risk_points", "TEXT NULL", "TEXT"),
     # v25: small copies of the ads' photos (the listing_thumbs table, thumbs.py): saved or not, and deleting the
-    # old ones, the photos of ads gone for more than thumbnail_purge_days, by hand or on every run when
-    # thumbnail_auto_purge is on (off by default; the columns' names say "purge", the dashboard "delete")
+    # old ones, the photos of ads gone for more than thumbnail_delete_after_days, by hand or on every run when
+    # thumbnail_auto_delete is on (off by default; v26 renamed them from thumbnail_purge_days, thumbnail_auto_purge)
     ("settings", "thumbnails", "TINYINT(1) NOT NULL DEFAULT 1", "INTEGER NOT NULL DEFAULT 1"),
-    ("settings", "thumbnail_purge_days", "INT NOT NULL DEFAULT 90", "INTEGER NOT NULL DEFAULT 90"),
-    ("settings", "thumbnail_auto_purge", "TINYINT(1) NOT NULL DEFAULT 0", "INTEGER NOT NULL DEFAULT 0"),
+    ("settings", "thumbnail_delete_after_days", "INT NOT NULL DEFAULT 90", "INTEGER NOT NULL DEFAULT 90"),
+    ("settings", "thumbnail_auto_delete", "TINYINT(1) NOT NULL DEFAULT 0", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 # Columns renamed since: (table, old name, new name), renamed in place on start, before the above
@@ -111,6 +111,9 @@ RENAMED_COLUMNS = [
     ("searches", "max_price", "max_budget"),
     # v23: the duplicate window in minutes (set to 30 by the upgrade: the hours it held aren't minutes)
     ("settings", "duplicate_within_hours", "duplicate_within_minutes"),
+    # v26: old photos are deleted, as the dashboard says (v25 named the two settings after a "purge")
+    ("settings", "thumbnail_purge_days", "thumbnail_delete_after_days"),
+    ("settings", "thumbnail_auto_purge", "thumbnail_auto_delete"),
 ]
 
 MYSQL_SCHEMA = [
