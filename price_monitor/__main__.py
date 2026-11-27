@@ -5,7 +5,7 @@
   python -m price_monitor --test-email      email the latest stored listings, to check delivery
   python -m price_monitor --import FILE     add the searches in a JSON file to the database
   python -m price_monitor --export FILE     write every search to a JSON file --import reads (a backup)
-  python -m price_monitor --purge-thumbnails DAYS  delete the saved photos of ads gone for more than DAYS
+  python -m price_monitor --delete-old-photos DAYS  delete the saved photos of ads gone for more than DAYS
                                             days (pinned ones kept)
   python -m price_monitor --rescore         work out every stored listing's risk again with the current
                                             rules (after they change; reads nothing from the platforms)
@@ -194,13 +194,13 @@ def main(argv):
                 raise SystemExit("Usage: python -m price_monitor --import FILE")
             import_searches(db, argv[i + 1])
             return 0
-        if "--purge-thumbnails" in argv:
+        if "--delete-old-photos" in argv:
             from . import thumbs
             from .db import utcnow
-            days = option(argv, "--purge-thumbnails")
+            days = option(argv, "--delete-old-photos")
             if not (days or "").isdigit():
-                raise SystemExit("Usage: python -m price_monitor --purge-thumbnails DAYS (photos of ads gone longer)")
-            log.info("Purged the photos of ads gone for more than %s days: %d", days, thumbs.purge(db, int(days), utcnow()))
+                raise SystemExit("Usage: python -m price_monitor --delete-old-photos DAYS (photos of ads gone longer)")
+            log.info("Deleted the photos of ads gone for more than %s days: %d", days, thumbs.delete_old(db, int(days), utcnow()))
             return 0
         if "--rescore" in argv:
             from .runner import rescore

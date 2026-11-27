@@ -6,9 +6,9 @@ suspicious. A run saves a few (PER_RUN, within TIME_BUDGET), newest first, so th
 before this existed fill in over a few runs. A photo that fails is tried again a day later,
 MAX_TRIES times in all.
 
-Purged by the rule the dashboard uses too (README, "listing_thumbs"): the photos of ads gone, not
-seen for more than N days (settings.thumbnail_purge_days), pinned ones kept. By hand (the
-dashboard's Settings, or --purge-thumbnails), or on every run when settings.thumbnail_auto_purge
+Old ones deleted by the rule the dashboard uses too (README, "listing_thumbs"): the photos of ads
+gone, not seen for more than N days (settings.thumbnail_purge_days), pinned ones kept. By hand (the
+dashboard's Settings, or --delete-old-photos), or on every run when settings.thumbnail_auto_purge
 is on (off by default).
 """
 
@@ -109,7 +109,7 @@ def save_missing(db, now):
     return saved, failed
 
 
-def purge(db, days, now):
+def delete_old(db, days, now):
     """Deletes the photos of ads not seen for more than `days` days (gone from the platform), pinned
     ones kept; returns how many"""
     before = to_db_time(now - timedelta(days=days))
@@ -123,9 +123,9 @@ def purge(db, days, now):
     return len(ids)
 
 
-def auto_purge(db, now):
-    """The purge on every run, when the settings turn it on (off by default)"""
+def auto_delete_old(db, now):
+    """Old photos deleted on every run, when the settings turn it on (off by default)"""
     s = db.one("SELECT thumbnail_auto_purge, thumbnail_purge_days FROM settings WHERE id = 1") or {}
     if s.get("thumbnail_auto_purge") and s.get("thumbnail_purge_days"):
-        return purge(db, int(s["thumbnail_purge_days"]), now)
+        return delete_old(db, int(s["thumbnail_purge_days"]), now)
     return 0

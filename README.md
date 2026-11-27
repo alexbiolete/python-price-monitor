@@ -61,7 +61,7 @@ With no SMTP settings, the email is printed instead of sent.
 .venv/bin/python -m price_monitor --import searches.example.json   # add searches (once)
 .venv/bin/python -m price_monitor --export searches.json           # save every search to a file (a backup)
 .venv/bin/python -m price_monitor --rescore                        # every stored listing's risk again, with the current rules
-.venv/bin/python -m price_monitor --purge-thumbnails 90            # delete the saved photos of ads gone 90+ days (pinned kept)
+.venv/bin/python -m price_monitor --delete-old-photos 90           # delete the saved photos of ads gone 90+ days (pinned kept)
 .venv/bin/python -m price_monitor                  # keep running; Ctrl+C to stop
 .venv/bin/python -m price_monitor --once           # one check, then exit (what cron runs)
 .venv/bin/python -m price_monitor --status         # the searches and their last run
@@ -399,8 +399,8 @@ deletes the ad and its files. `listing_id` (the key), `data`: an 80x80 WebP (the
 about 1 KB; `NULL`: not saved yet), `tries`: failed attempts, `saved_at`. Each run saves up to 40, newest
 first, for listings in their search's budget, pinned or marked suspicious (the ones found before fill in
 over a few runs); a failed one is tried again a day later, 3 times in all. Nothing is saved while
-`settings.thumbnails` is 0. The purge (by hand from a dashboard, or `--purge-thumbnails DAYS`; on every
-run when `settings.thumbnail_auto_purge` is 1) deletes the rows of listings whose `last_seen` is more than
+`settings.thumbnails` is 0. Deleting old photos (by hand from a dashboard, or `--delete-old-photos DAYS`; on
+every run when `settings.thumbnail_auto_purge` is 1) deletes the rows of listings whose `last_seen` is more than
 `settings.thumbnail_purge_days` days ago (ads gone from the platform), except pinned ones. A reader may
 delete rows by the same rule.
 
@@ -437,7 +437,7 @@ was posted. Not a warning sign; `posted_at` stays the original.
 | `merge_emails` ✎ | `1` (default): one email for all products a check found something for; `0`: one per product |
 | `email_max_risk` ✎ | The highest risk level emailed: `none` (only listings without one), `low`, `medium` or `high` (all, the default). Listings above it are stored and shown, not emailed |
 | `thumbnails` ✎ | `1` (default): save small copies of the ads' photos (`listing_thumbs`); `0`: save none (the saved ones stay) |
-| `thumbnail_purge_days` ✎ | The purge deletes the photos of ads gone (not seen) for more than this many days, pinned ones kept (default 90) |
-| `thumbnail_auto_purge` ✎ | `1`: purge on every run; `0` (default): only by hand |
+| `thumbnail_purge_days` ✎ | Old photos: the ones of ads gone (not seen) for more than this many days, pinned ones kept (default 90) |
+| `thumbnail_auto_purge` ✎ | `1`: delete old photos on every run; `0` (default): only by hand |
 
 Deleting a search deletes its listings and their history (foreign keys cascade).
