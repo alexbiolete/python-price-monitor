@@ -414,16 +414,20 @@ def reposted(db, row, uploaded, now):
 def recheck(db, search, provider, now):
     """Stored ads this run didn't see (they fell off the results, or no longer match), and for
     providers with recheck_seen the ones it did see too: read their own pages, at most
-    provider.max_check, the longest unchecked first. A sold or removed ad gets inactive_at; one still
+    provider.max_check: first the ones gone from the results since their last read (likely just sold), then
+    the longest unchecked, each of those at most every RECHECK_EVERY. A sold or removed ad gets inactive_at; one still
     up gets its price updated where the page shows it, and a "reposted" update when the page shows
     it uploaded again (Vinted). Returns (checked, gone, repriced, reposted)."""
     stamp = to_db_time(now)
     unseen = "" if provider.recheck_seen else " AND last_seen < ?"
+    # Gone from the results since its page was last read (seen then, not this run): most likely just sold or
+    # removed, so read at once, first, not RECHECK_EVERY after the last read
+    vanished = "(last_seen < ? AND (checked_at IS NULL OR last_seen >= checked_at))"
     rows = db.all(
         "SELECT id, url, price, currency, posted_at, risk_signals FROM listings WHERE search_id = ? AND inactive_at IS NULL"
-        + unseen + " AND (checked_at IS NULL OR checked_at < ?)"
-        " ORDER BY checked_at IS NOT NULL, checked_at, last_seen LIMIT %d" % provider.max_check,
-        (search["id"],) + (() if provider.recheck_seen else (stamp,)) + (to_db_time(now - RECHECK_EVERY),))
+        + unseen + f" AND (checked_at IS NULL OR checked_at < ? OR {vanished})"
+        f" ORDER BY {vanished} DESC, checked_at IS NOT NULL, checked_at, last_seen LIMIT %d" % provider.max_check,
+        (search["id"],) + (() if provider.recheck_seen else (stamp,)) + (to_db_time(now - RECHECK_EVERY), stamp, stamp))
     checked = gone = repriced = reposts = 0
     for i, row in enumerate(rows):
         if i:
